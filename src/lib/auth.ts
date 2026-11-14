@@ -31,11 +31,24 @@ export function verifyToken(token: string): JWTPayload | null {
   }
 }
 
+// Cookie "secure" exige HTTPS. Em servidor de intranet acessado por HTTP
+// (ex.: http://192.168.x.x:3000) o cookie secure nunca é enviado e o login
+// quebra. Por isso o flag deriva do protocolo da APP_URL, com override
+// explícito via COOKIE_SECURE=true|false.
+function isSecureCookie(): boolean {
+  if (process.env.COOKIE_SECURE !== undefined) {
+    return process.env.COOKIE_SECURE === 'true';
+  }
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || '';
+  if (appUrl.startsWith('http://')) return false;
+  return process.env.NODE_ENV === 'production';
+}
+
 export async function setAuthCookie(token: string) {
   const cookieStore = await cookies();
   cookieStore.set('auth-token', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecureCookie(),
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7, // 7 days
     path: '/',

@@ -350,7 +350,7 @@ export function FormularioClasseII({
 
               {/* Formulário Equipamento Individual */}
               {tipoSelecionado === "EQUIPAMENTO_INDIVIDUAL" && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Número de Militares{" "}
@@ -396,7 +396,7 @@ export function FormularioClasseII({
                     <label className="block text-xs font-medium text-gray-700 mb-2">
                       Itens Balísticos
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={() =>
@@ -427,7 +427,7 @@ export function FormularioClasseII({
                           key={index}
                           className="bg-gray-50 rounded border border-gray-200 p-2 flex items-center justify-between"
                         >
-                          <div className="flex-1 grid grid-cols-3 gap-2 text-xs">
+                          <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                             <span className="font-medium">{item.tipo}</span>
                             <input
                               type="number"
@@ -517,16 +517,16 @@ export function FormularioClasseII({
                       {itensEstacionamento.map((item, i) => (
                         <div
                           key={i}
-                          className="flex items-center justify-between text-xs bg-gray-50 p-2 rounded"
+                          className="flex items-center justify-between gap-2 text-xs bg-gray-50 p-2 rounded"
                         >
-                          <span>
+                          <span className="flex-1 min-w-0 break-words">
                             {item.tipo}: {item.quantidade} × R${" "}
                             {item.mntDia.toFixed(2)} × {item.periodoDias} dias
                           </span>
                           <button
                             type="button"
                             onClick={() => removerItemEstacionamento(i)}
-                            className="p-1 text-red-600 hover:bg-red-50 rounded"
+                            className="p-1 text-red-600 hover:bg-red-50 rounded shrink-0"
                           >
                             <X className="w-3 h-3" />
                           </button>
@@ -552,7 +552,7 @@ export function FormularioClasseII({
                       className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
                       placeholder="Tipo do item"
                     />
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       <div className="flex flex-col">
                         <p className="text-xs font-medium text-gray-700">
                           Quantidade:

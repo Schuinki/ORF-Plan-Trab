@@ -4,18 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useSession } from "@/hooks/useSession";
-
-interface OMParticipante {
-  omId: string;
-  om: {
-    id: string;
-    nome: string;
-    sigla: string;
-  };
-}
 
 interface Operacao {
   id: string;
@@ -25,8 +17,28 @@ interface Operacao {
     nome: string;
     sigla: string;
   };
-  omsParticipantes: OMParticipante[];
 }
+
+const TIPOS_PLANO = [
+  {
+    value: "LOGISTICO",
+    label: "Logístico",
+    descricao:
+      "Para despesas de apoio à tropa: alimentação, combustível, material, manutenção de viaturas, etc. (Classes I a X).",
+  },
+  {
+    value: "OPERACIONAL_GND3",
+    label: "Operacional (GND 3)",
+    descricao:
+      "Para despesas diretamente ligadas à execução da operação: diárias, passagens, locação de serviços, etc. (custeio).",
+  },
+  {
+    value: "OPERACIONAL_GND4",
+    label: "Operacional (GND 4)",
+    descricao:
+      "Para aquisição de equipamentos e material permanente ligados à operação (investimento).",
+  },
+];
 
 export default function NovoPlanoPage() {
   const router = useRouter();
@@ -34,49 +46,64 @@ export default function NovoPlanoPage() {
   const { user } = useSession();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [operacoes, setOperacoes] = useState<Operacao[]>([]);
-  const [loadingOperacoes, setLoadingOperacoes] = useState(true);
+  const [operacao, setOperacao] = useState<Operacao | null>(null);
+  const [loadingOperacao, setLoadingOperacao] = useState(true);
+  const [tituloEditado, setTituloEditado] = useState(false);
+
+  const operacaoId = searchParams.get("operacaoId") || "";
 
   const [formData, setFormData] = useState({
-    titulo: "P Trab LOG CMA",
-    operacaoId: searchParams.get("operacaoId") || "",
-    prioridade: "MEDIA",
-    tipo: "LOGISTICO",
-    acoes: "",
-    despesasOperacionais: "",
+    titulo: "",
+    tipo: searchParams.get("tipo") || "LOGISTICO",
     omId: searchParams.get("omId") || user?.om.id || "",
   });
 
+  // Um plano só pode ser criado a partir de dentro de uma operação. Sem o
+  // operacaoId na URL (ex.: usuário digitou a página diretamente), manda de
+  // volta para a lista de operações.
   useEffect(() => {
-    fetchOperacoes();
-  }, []);
+    if (!operacaoId) {
+      router.replace("/dashboard/operacoes");
+      return;
+    }
+
+    fetch(`/api/operacoes/${operacaoId}`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Operação não encontrada");
+        return res.json();
+      })
+      .then((data) => setOperacao(data))
+      .catch(() => router.replace("/dashboard/operacoes"))
+      .finally(() => setLoadingOperacao(false));
+  }, [operacaoId, router]);
 
   useEffect(() => {
     if (user?.om.id && !formData.omId) {
       setFormData((prev) => ({ ...prev, omId: user.om.id }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.om.id]);
 
-  const fetchOperacoes = async () => {
-    try {
-      const response = await fetch("/api/operacoes");
-      const data = await response.json();
-      setOperacoes(data);
-    } catch (error) {
-      console.error("Error fetching operacoes:", error);
-    } finally {
-      setLoadingOperacoes(false);
-    }
+  const TIPO_ABREV: Record<string, string> = {
+    LOGISTICO: "LOG",
+    OPERACIONAL_GND3: "OP GND3",
+    OPERACIONAL_GND4: "OP GND4",
   };
 
-  // Filtrar operações onde a OM pai do usuário participa
-  const operacoesFiltradas = operacoes.filter((op) => {
-    if (!user?.om.omPaiId) return true;
+  // Título padrão inclui a OM e o nome da operação
+  useEffect(() => {
+    if (tituloEditado || !operacao) return;
 
-    return op.omsParticipantes.some(
-      (p) => p.omId === user.om.omPaiId || p.omId === user.om.id
-    );
-  });
+    const sigla = user?.om.sigla || "";
+    const partes = [
+      `P Trab ${TIPO_ABREV[formData.tipo] || formData.tipo}`,
+      sigla,
+      `- ${operacao.nome}`,
+    ].filter(Boolean);
+
+    setFormData((prev) => ({ ...prev, titulo: partes.join(" ") }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.tipo, operacao, user?.om.sigla, tituloEditado]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,7 +114,7 @@ export default function NovoPlanoPage() {
       const response = await fetch("/api/planos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, operacaoId }),
       });
 
       const data = await response.json();
@@ -104,114 +131,91 @@ export default function NovoPlanoPage() {
     }
   };
 
+  if (loadingOperacao || !operacao) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-military-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="mb-6">
         <Link
-          href="/dashboard/planos"
+          href={`/dashboard/operacoes/${operacaoId}`}
           className="inline-flex items-center text-olive-700 hover:text-military-900 mb-4"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Voltar para Planos
+          Voltar à Operação: {operacao.nome}
         </Link>
-        <h1 className="text-3xl font-bold text-military-900">
+        <h1 className="text-2xl sm:text-3xl font-bold text-military-900">
           Novo Plano de Trabalho
         </h1>
+        <p className="text-olive-700 mt-1">
+          Você está criando um plano de trabalho para a operação{" "}
+          <strong>{operacao.nome}</strong>, em nome da sua OM.
+        </p>
       </div>
 
       <div className="bg-white rounded-lg border border-olive-200 p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-olive-800 mb-1">
+            <div className="md:col-span-2">
+              <label className="flex items-center gap-1.5 text-sm font-medium text-olive-800 mb-2">
                 Tipo de Plano <span className="text-red-600">*</span>
               </label>
-              <select
-                value={formData.tipo}
-                onChange={(e) =>
-                  setFormData({ ...formData, tipo: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-olive-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 bg-white"
-                required
-              >
-                <option value="LOGISTICO">Logístico</option>
-                <option value="OPERACIONAL_GND3" disabled>
-                  Operacional GND3 (Em desenvolvimento)
-                </option>
-                <option value="OPERACIONAL_GND4" disabled>
-                  Operacional GND4 (Em desenvolvimento)
-                </option>
-                <option value="RACAO_R2" disabled>
-                  Ração R2 (Em desenvolvimento)
-                </option>
-                <option value="MUNICAO" disabled>
-                  Munição (Em desenvolvimento)
-                </option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-olive-800 mb-1">
-                Prioridade <span className="text-red-600">*</span>
-              </label>
-              <select
-                value={formData.prioridade}
-                onChange={(e) =>
-                  setFormData({ ...formData, prioridade: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-olive-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 bg-white"
-                required
-              >
-                <option value="BAIXA">Baixa</option>
-                <option value="MEDIA">Média</option>
-                <option value="ALTA">Alta</option>
-                <option value="CRITICA">Crítica</option>
-              </select>
+              <div className="space-y-2">
+                {TIPOS_PLANO.map((tp) => (
+                  <label
+                    key={tp.value}
+                    className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                      formData.tipo === tp.value
+                        ? "border-military-500 bg-military-50"
+                        : "border-olive-200 hover:border-olive-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="tipo"
+                      value={tp.value}
+                      checked={formData.tipo === tp.value}
+                      onChange={(e) =>
+                        setFormData({ ...formData, tipo: e.target.value })
+                      }
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="block font-medium text-military-900">
+                        {tp.label}
+                      </span>
+                      <span className="block text-xs text-olive-600 mt-0.5">
+                        {tp.descricao}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
 
             <div className="md:col-span-2">
+              <label className="flex items-center gap-1.5 text-sm font-medium text-olive-800 mb-1">
+                Título do Plano
+                <HelpTooltip>
+                  Preenchido automaticamente com base no tipo escolhido e na
+                  operação. Você pode alterar à vontade — é só um nome para
+                  identificar o plano.
+                </HelpTooltip>
+              </label>
               <Input
-                label="Título do Plano"
                 value={formData.titulo}
-                onChange={(e) =>
-                  setFormData({ ...formData, titulo: e.target.value })
-                }
-                placeholder="Ex: Plano Logístico Operação CATRIMANI II"
+                onChange={(e) => {
+                  setTituloEditado(true);
+                  setFormData({ ...formData, titulo: e.target.value });
+                }}
+                placeholder="Ex: P Trab LOG CMA - Operação CATRIMANI II"
                 required
               />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-olive-800 mb-1">
-                Operação <span className="text-red-600">*</span>
-              </label>
-              {loadingOperacoes ? (
-                <div className="w-full px-3 py-2 border border-olive-300 rounded-lg bg-military-50 text-olive-700">
-                  Carregando operações...
-                </div>
-              ) : operacoesFiltradas.length === 0 ? (
-                <div className="space-y-2">
-                  <div className="w-full px-3 py-2 border border-amber-300 rounded-lg bg-amber-50 text-amber-800">
-                    Nenhuma operação disponível para sua OM
-                  </div>
-                </div>
-              ) : (
-                <select
-                  value={formData.operacaoId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, operacaoId: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-olive-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 bg-white"
-                  required
-                >
-                  <option value="">Selecione uma operação</option>
-                  {operacoesFiltradas.map((op) => (
-                    <option key={op.id} value={op.id}>
-                      {op.nome} ({op.om.sigla}) - {op.status}
-                    </option>
-                  ))}
-                </select>
-              )}
             </div>
           </div>
           {error && (
@@ -220,15 +224,11 @@ export default function NovoPlanoPage() {
             </div>
           )}
 
-          <div className="flex gap-4">
-            <Button
-              type="submit"
-              isLoading={isLoading}
-              disabled={operacoesFiltradas.length === 0}
-            >
+          <div className="flex flex-wrap gap-4">
+            <Button type="submit" isLoading={isLoading}>
               Criar Plano de Trabalho
             </Button>
-            <Link href="/dashboard/planos">
+            <Link href={`/dashboard/operacoes/${operacaoId}`}>
               <Button type="button" variant="secondary">
                 Cancelar
               </Button>

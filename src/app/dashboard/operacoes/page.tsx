@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Calendar, Users } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -15,17 +15,18 @@ interface Operacao {
   dataInicio: string;
   dataFinal: string;
   status: string;
-  prioridade: string;
   om: {
     nome: string;
     sigla: string;
   };
+  omsParticipantes: Array<{ id: string }>;
   planosTrabalho: Array<{ id: string; titulo: string; status: string }>;
 }
 
 export default function OperacoesPage() {
   const [operacoes, setOperacoes] = useState<Operacao[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [busca, setBusca] = useState('');
 
   useEffect(() => {
     fetchOperacoes();
@@ -43,25 +44,16 @@ export default function OperacoesPage() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    const colors = {
-      RASCUNHO: 'bg-gray-100 text-gray-800',
-      EM_ANALISE: 'bg-yellow-100 text-yellow-800',
-      APROVADO: 'bg-green-100 text-green-800',
-      REPROVADO: 'bg-red-100 text-red-800',
-    };
-    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
-  };
-
-  const getPrioridadeColor = (prioridade: string) => {
-    const colors = {
-      BAIXA: 'bg-blue-100 text-blue-800',
-      MEDIA: 'bg-yellow-100 text-yellow-800',
-      ALTA: 'bg-orange-100 text-orange-800',
-      CRITICA: 'bg-red-100 text-red-800',
-    };
-    return colors[prioridade as keyof typeof colors] || 'bg-gray-100 text-gray-800';
-  };
+  const operacoesFiltradas = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    if (!termo) return operacoes;
+    return operacoes.filter(
+      (op) =>
+        op.nome.toLowerCase().includes(termo) ||
+        op.om.sigla.toLowerCase().includes(termo) ||
+        op.om.nome.toLowerCase().includes(termo)
+    );
+  }, [operacoes, busca]);
 
   if (isLoading) {
     return (
@@ -73,13 +65,13 @@ export default function OperacoesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Operações</h1>
           <p className="text-gray-600">Gerenciar operações militares</p>
         </div>
-        <Link href="/dashboard/operacoes/nova">
-          <Button>
+        <Link href="/dashboard/operacoes/nova" className="w-full sm:w-auto">
+          <Button className="w-full sm:w-auto">
             <Plus className="w-5 h-5 mr-2" />
             Nova Operação
           </Button>
@@ -98,45 +90,112 @@ export default function OperacoesPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {operacoes.map((operacao) => (
-            <Link
-              key={operacao.id}
-              href={`/dashboard/operacoes/${operacao.id}`}
-              className="bg-white rounded-lg border border-gray-200 hover:shadow-lg transition-shadow p-6"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">{operacao.nome}</h3>
-                  <p className="text-sm text-gray-600">{operacao.om.sigla}</p>
-                </div>
-                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPrioridadeColor(operacao.prioridade)}`}>
-                  {operacao.prioridade}
-                </span>
-              </div>
+        <>
+          <div className="relative mb-4 max-w-md">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por nome da operação ou OM..."
+              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 focus:border-transparent text-sm"
+            />
+          </div>
 
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center text-sm text-gray-600">
-                  <Users className="w-4 h-4 mr-2" />
-                  {operacao.efetivoMil} militares {operacao.efetivoExt ? ` - ${operacao.efetivoExt} externos` : null}
+          {operacoesFiltradas.length === 0 ? (
+            <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+              <p className="text-gray-600">
+                Nenhuma operação encontrada para &quot;{busca}&quot;
+              </p>
+            </div>
+          ) : (
+        <>
+          {/* Mobile: card list */}
+          <div className="sm:hidden space-y-3">
+            {operacoesFiltradas.map((operacao) => (
+              <Link
+                key={operacao.id}
+                href={`/dashboard/operacoes/${operacao.id}`}
+                className="block bg-white rounded-lg border border-gray-200 p-4 hover:bg-gray-50"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <span className="font-medium text-gray-900 break-words">{operacao.nome}</span>
                 </div>
-                <div className="flex items-center text-sm text-gray-600">
-                  <Calendar className="w-4 h-4 mr-2" />
-                  {format(new Date(operacao.dataInicio), 'dd MMM', { locale: ptBR })} - {format(new Date(operacao.dataFinal), 'dd MMM yyyy', { locale: ptBR })}
+                <div className="grid grid-cols-2 gap-1 text-sm text-gray-600">
+                  <div>OM: {operacao.om.sigla}</div>
+                  <div className="text-right">
+                    Efetivo: {operacao.efetivoMil}
+                    {operacao.efetivoExt ? ` + ${operacao.efetivoExt}` : ''}
+                  </div>
+                  <div className="col-span-2 whitespace-nowrap">
+                    {format(new Date(operacao.dataInicio), 'dd MMM', { locale: ptBR })} –{' '}
+                    {format(new Date(operacao.dataFinal), 'dd MMM yyyy', { locale: ptBR })}
+                  </div>
+                  <div>OMs: {operacao.omsParticipantes.length}</div>
+                  <div className="text-right">Planos: {operacao.planosTrabalho.length}</div>
                 </div>
-              </div>
+              </Link>
+            ))}
+          </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                <span className="text-sm text-gray-600">
-                  {operacao.planosTrabalho.length} plano(s)
-                </span>
-                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(operacao.status)}`}>
-                  {operacao.status.replace('_', ' ')}
-                </span>
-              </div>
-            </Link>
-          ))}
-        </div>
+          {/* Desktop/tablet: table */}
+          <div className="hidden sm:block bg-white rounded-lg border border-gray-200 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="text-left p-3 font-medium text-gray-700">Nome</th>
+                <th className="text-left p-3 font-medium text-gray-700">OM</th>
+                <th className="text-left p-3 font-medium text-gray-700">Período</th>
+                <th className="text-right p-3 font-medium text-gray-700">Efetivo</th>
+                <th className="text-right p-3 font-medium text-gray-700">OMs Participantes</th>
+                <th className="text-right p-3 font-medium text-gray-700">Planos</th>
+                <th className="text-right p-3 font-medium text-gray-700"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {operacoesFiltradas.map((operacao) => (
+                <tr
+                  key={operacao.id}
+                  className="border-b border-gray-100 last:border-0 hover:bg-gray-50"
+                >
+                  <td className="p-3">
+                    <Link
+                      href={`/dashboard/operacoes/${operacao.id}`}
+                      className="font-medium text-gray-900 hover:underline hover:text-military-700"
+                    >
+                      {operacao.nome}
+                    </Link>
+                  </td>
+                  <td className="p-3 text-gray-600">{operacao.om.sigla}</td>
+                  <td className="p-3 text-gray-600 whitespace-nowrap">
+                    {format(new Date(operacao.dataInicio), 'dd MMM', { locale: ptBR })} –{' '}
+                    {format(new Date(operacao.dataFinal), 'dd MMM yyyy', { locale: ptBR })}
+                  </td>
+                  <td className="p-3 text-right text-gray-600">
+                    {operacao.efetivoMil}
+                    {operacao.efetivoExt ? ` + ${operacao.efetivoExt}` : ''}
+                  </td>
+                  <td className="p-3 text-right text-gray-600">
+                    {operacao.omsParticipantes.length}
+                  </td>
+                  <td className="p-3 text-right text-gray-600">
+                    {operacao.planosTrabalho.length}
+                  </td>
+                  <td className="p-3 text-right">
+                    <Link href={`/dashboard/operacoes/${operacao.id}`}>
+                      <Button variant="outline" size="sm">
+                        Acessar
+                      </Button>
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </div>
+        </>
+          )}
+        </>
       )}
     </div>
   );

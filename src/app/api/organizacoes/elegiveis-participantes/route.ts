@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { TipoOM } from "@prisma/client";
 
 /**
  * GET /api/organizacoes/elegiveis-participantes
- * Retorna apenas OMs que são filhas diretas de CMA.
- * Estas são as únicas OMs elegíveis para serem participantes de operações.
+ * Retorna todas as OMs elegíveis para serem participantes de operações.
+ * Qualquer OM pode ser adicionada como participante, inclusive OMs fora
+ * da hierarquia da CMA (ex.: COTER, CIE) — não há mais restrição de
+ * hierarquia aqui.
  */
 export async function GET() {
   try {
@@ -16,13 +17,7 @@ export async function GET() {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
 
-    // Buscar OMs que são filhas diretas de CMA
     const organizacoes = await prisma.organizacaoMilitar.findMany({
-      where: {
-        omPai: {
-          tipo: TipoOM.CMA,
-        },
-      },
       select: {
         id: true,
         nome: true,

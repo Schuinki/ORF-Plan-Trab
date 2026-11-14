@@ -4,12 +4,7 @@ import { useState, useEffect } from "react";
 import { PreviewCalculo } from "../PreviewCalculo";
 import { HandleParametrosChange } from "../ModalCriarDespesa";
 import type { OperacaoWithEfetivo, UserOM, NaturezaSelect, RateioNatureza } from "@/types/despesas";
-
-interface ParametrosClasseX {
-  quantidade: number;
-  valorUnitario: number;
-  descricaoDetalhada: string;
-}
+import { calcularClasseX, type ParametrosClasseX } from "@/lib/calculos/classeX";
 
 interface FormularioClasseXProps {
   value: ParametrosClasseX | null;
@@ -55,49 +50,21 @@ export function FormularioClasseX({
   }, [params]);
 
   const calcular = () => {
-    const { quantidade, valorUnitario, descricaoDetalhada } = params;
-
-    if (
-      !quantidade ||
-      quantidade <= 0 ||
-      !valorUnitario ||
-      valorUnitario <= 0
-    ) {
+    try {
+      const resultado = calcularClasseX(
+        params,
+        planoOm?.sigla,
+        operacao.nome,
+        getNaturezasCodigos()
+      );
+      setValorTotal(resultado.valorTotal);
+      setCarimbo(resultado.carimbo);
+      setCarimboEditadoManualmente(false);
+      onChange({ params, valor: resultado.valorTotal, descricao: resultado.carimbo });
+    } catch {
       setValorTotal(null);
       setCarimbo("");
-      return;
     }
-
-    const total = quantidade * valorUnitario;
-    const totalFinal = Number(total.toFixed(2));
-    const totalFormatado = `R$ ${totalFinal.toLocaleString("pt-BR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-    const unidadeTexto = planoOm?.sigla || "OM não identificada";
-    const operacaoTexto = operacao.nome || "operação";
-    const textoPadrao = `Aquisição de material não classificado para emprego durante a ${operacaoTexto}.`;
-
-    // Usar naturezas selecionadas ou fallback
-    const naturezasCodigos = getNaturezasCodigos();
-    const naturezasTexto = naturezasCodigos.length > 0
-      ? naturezasCodigos.join(" e ")
-      : "33.90.30";
-
-    // Gerar memória de cálculo como string
-    const memoriaCalculo = `${naturezasTexto} – Destinado ao ${unidadeTexto}. ${textoPadrao}
-Memória de Cálculo:
-
-Descrição: ${descricaoDetalhada || "Não especificado"}
-
-→ ${quantidade} un × R$ ${valorUnitario.toFixed(2)} = ${totalFormatado}
-
-Total: ${totalFormatado}`;
-
-    setValorTotal(totalFinal);
-    setCarimbo(memoriaCalculo);
-    setCarimboEditadoManualmente(false);
-    onChange({ params, valor: totalFinal, descricao: memoriaCalculo });
   };
 
   const handleChange = (field: keyof ParametrosClasseX, value: any) => {

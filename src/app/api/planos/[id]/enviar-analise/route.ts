@@ -36,6 +36,7 @@ export async function POST(
       where: { id },
       include: {
         despesas: true,
+        despesasOperacionais: true,
         om: true,
         operacao: {
           include: {
@@ -78,8 +79,11 @@ export async function POST(
       );
     }
 
-    // Validar que tem pelo menos 1 despesa
-    if (plano.despesas.length === 0) {
+    // Validar que tem pelo menos 1 despesa (logística ou operacional,
+    // dependendo do tipo do plano)
+    const totalDespesas =
+      plano.despesas.length + plano.despesasOperacionais.length;
+    if (totalDespesas === 0) {
       return NextResponse.json(
         {
           error:
@@ -142,7 +146,7 @@ export async function POST(
           statusNovo: StatusPlano.EM_ANALISE,
           nivelAprovacao: 1,
           proximoAprovador: `S4 - ${primeiroNivel?.omSigla || plano.om.sigla}`,
-          totalDespesas: plano.despesas.length,
+          totalDespesas,
           valorTotal: valorTotal.toString(),
           valorLimite: validacao.valorLimite?.toString(),
           percentualUtilizado: validacao.percentualUtilizado,

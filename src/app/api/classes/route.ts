@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { ordenarClasses } from '@/lib/classes';
 
 /**
  * GET /api/classes
@@ -23,12 +24,10 @@ export async function GET() {
         possuiCalculoAutomatizado: true,
         createdAt: true,
       },
-      orderBy: {
-        nome: 'asc',
-      },
     });
 
-    return NextResponse.json(classes);
+    // Ordena na ordem militar I–X (orderBy alfabético colocaria IX antes de V)
+    return NextResponse.json(ordenarClasses(classes));
   } catch (error) {
     console.error('Get classes error:', error);
     return NextResponse.json(

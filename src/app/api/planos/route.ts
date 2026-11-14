@@ -3,17 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import {
   canCreatePlanoTrabalho,
-  canFillPlanoTrabalho,
 } from "@/lib/permissions";
 import { getTodasOmsSubordinadas } from "@/lib/validators/om-participante";
 import { z } from "zod";
-import { StatusPlano, Prioridade, TipoEvento } from "@prisma/client";
+import { StatusPlano, TipoEvento, TipoPlano } from "@prisma/client";
 
 const createPlanoSchema = z.object({
   operacaoId: z.string().cuid("ID de operação inválido"),
   titulo: z.string().min(1, "Título é obrigatório"),
-  prioridade: z.nativeEnum(Prioridade).optional(),
   omId: z.string().cuid("ID de OM inválido").optional(),
+  tipo: z.nativeEnum(TipoPlano).default(TipoPlano.LOGISTICO),
 });
 
 export async function GET(request: NextRequest) {
@@ -168,43 +167,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verificar se o usuário pode preencher plano para esta operação
-    // SUPER_ADMIN pode sempre criar
-    if (user.role !== "SUPER_ADMIN") {
-      const canFill = await canFillPlanoTrabalho(
-        data.omId || user.omId,
-        data.operacaoId
-      );
-
-      if (!canFill.allowed) {
-        return NextResponse.json(
-          {
-            error:
-              canFill.reason || "Você não pode criar plano para esta operação",
-          },
-          { status: 403 }
-        );
-      }
-    }
-
-    // Verificar se já existe plano para esta OM nesta operação
-    const existingPlano = await prisma.planoTrabalho.findUnique({
-      where: {
-        operacaoId_omId: {
-          operacaoId: data.operacaoId,
-          omId: data.omId || user.omId,
-        },
-      },
-    });
-
-    if (existingPlano) {
+    // Qualquer usuário autenticado com papel permitido (checado acima por
+    // canCreatePlanoTrabalho) pode criar um plano para qualquer OM
+    // participante da operação, independentemente da hierarquia de OM.
+    const omAlvo = data.omId || user.omId;
+    const omParticipa = operacao.omsParticipantes.some(
+      (p) => p.omId === omAlvo
+    );
+    if (!omParticipa) {
       return NextResponse.json(
-        {
-          error: "Já existe um plano de trabalho da sua OM para esta operação",
-        },
+        { error: "A OM informada não participa desta operação" },
         { status: 400 }
       );
     }
+
+    // Uma OM pode ter mais de um plano do mesmo tipo na mesma operação
+    // (ex.: revisões, frentes de despesa separadas). Sem bloqueio aqui.
 
     // Obter próxima versão (global para a operação, para histórico)
     const lastVersion = await prisma.planoTrabalho.findFirst({
@@ -223,8 +201,8 @@ export async function POST(request: NextRequest) {
         operacaoId: data.operacaoId,
         omId: data.omId || user.omId,
         responsavelId: user.id,
-        prioridade: data.prioridade || Prioridade.MEDIA,
         status: StatusPlano.RASCUNHO,
+        tipo: data.tipo,
       },
       include: {
         operacao: {

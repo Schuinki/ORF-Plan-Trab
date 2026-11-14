@@ -3,19 +3,25 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { ArrowLeft, Plus, Trash2, Check, X, FileDown } from "lucide-react";
+import { DropdownMenu } from "@/components/ui/DropdownMenu";
+import { ArrowLeft, Trash2, Check, X, FileDown, PenLine, Upload, Loader2, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { DespesasLogistico } from "@/components/despesas/DespesasLogistico";
+import { DespesasOperacionais } from "@/components/despesas-operacionais/DespesasOperacionais";
+import { ItensRacaoR2 } from "@/components/itens-racao/ItensRacaoR2";
+import { ItensMunicao } from "@/components/itens-municao/ItensMunicao";
 import { StatusAprovacao } from "@/components/planos/StatusAprovacao";
 import { HistoricoAprovacoes } from "@/components/planos/HistoricoAprovacoes";
-import { DespesaWithRelations, UserOM } from "@/types/despesas";
+import { ModalAssinarGovBr } from "@/components/planos/ModalAssinarGovBr";
+import { UserOM } from "@/types/despesas";
+import { getStatusPlanoLabel } from "@/lib/statusPlano";
 import { PlanoTrabalho, Prisma } from "@prisma/client";
 import { PlanoTrabalhoWithRelations } from "@/types/plano-trabalho";
 import {
   gerarPdfPlanoTrabalho,
   OpcoesPdf,
 } from "@/lib/pdf/gerarPdfPlanoTrabalho";
+import { gerarPdfPlanoTrabalhoOperacional } from "@/lib/pdf/gerarPdfPlanoTrabalhoOperacional";
 
 interface OM {
   id: string;
@@ -25,25 +31,27 @@ interface OM {
   codUG: string;
 }
 
-interface Natureza {
-  id: string;
-  codigo: string;
-  nome: string;
-  descricao: string | null;
+interface NivelCadeia {
+  nivel: number;
+  omSigla: string;
+  omNome: string;
+  status: "aprovado" | "atual" | "pendente";
 }
+
+type PlanoDetalhe = PlanoTrabalhoWithRelations & {
+  cadeiaAprovacao?: NivelCadeia[];
+  podeAprovarNivelAtual?: boolean;
+};
 
 export default function PlanoTrabalhoPage() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
 
-  const [plano, setPlano] = useState<PlanoTrabalhoWithRelations | null>(null);
-  const [despesas, setDespesas] = useState<DespesaWithRelations[]>([]);
+  const [plano, setPlano] = useState<PlanoDetalhe | null>(null);
   const [oms, setOms] = useState<OM[]>([]);
-  const [naturezas, setNaturezas] = useState<Natureza[]>([]);
+  const [omsLoading, setOmsLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
-  const [showAddItem, setShowAddItem] = useState(false);
-  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
   const [userOm, setUserOm] = useState<UserOM | null>(null);
 
   // Estado para modal de exportação PDF
@@ -53,30 +61,49 @@ export default function PlanoTrabalhoPage() {
     despesasOperacionais: "",
   });
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isGeneratingXlsx, setIsGeneratingXlsx] = useState(false);
 
-  // Form state for new item
-  const [newItem, setNewItem] = useState({
-    descricao: "",
-    valorUnitario: "",
-    quantidade: "",
-    omId: "",
-    naturezaId: "",
-  });
+  // Estado do modal de assinatura (nome/posto da autoridade que assina)
+  const [showAssinarModal, setShowAssinarModal] = useState(false);
+  const [nomeAssinante, setNomeAssinante] = useState("");
+  const [postoAssinante, setPostoAssinante] = useState("");
+  const [funcaoAssinante, setFuncaoAssinante] = useState("");
+  const [erroAssinatura, setErroAssinatura] = useState("");
+  const [isAssinando, setIsAssinando] = useState(false);
+
+  // Estado do modal de devolução (reprovar e mandar voltar)
+  const [showDevolverModal, setShowDevolverModal] = useState(false);
+  const [motivoDevolucao, setMotivoDevolucao] = useState("");
+  const [erroDevolucao, setErroDevolucao] = useState("");
+  const [isDevolvendo, setIsDevolvendo] = useState(false);
+
+  // Estado do modal de importação de despesas (round-trip xlsx)
+  const [showImportarModal, setShowImportarModal] = useState(false);
+  const [arquivoImportar, setArquivoImportar] = useState<File | null>(null);
+  const [isImportando, setIsImportando] = useState(false);
+  const [previewImportacao, setPreviewImportacao] = useState<{
+    itens: {
+      linha: number;
+      tipoLinha: string;
+      resumo: string;
+      erros: string[];
+    }[];
+    errosLeitura: { linha: number; mensagem: string }[];
+  } | null>(null);
+  const [erroImportacao, setErroImportacao] = useState("");
 
   useEffect(() => {
     if (id) {
       fetchData();
-      fetchOms();
-      fetchNaturezas();
       fetchCurrentUser();
     }
   }, [id]);
 
   const fetchData = async () => {
     try {
-      const [planoRes, itensRes] = await Promise.all([
+      const [planoRes, omsRes] = await Promise.all([
         fetch(`/api/planos/${id}`),
-        fetch(`/api/planos/${id}/itens`),
+        fetch("/api/organizacoes"),
       ]);
 
       if (planoRes.ok) {
@@ -84,9 +111,12 @@ export default function PlanoTrabalhoPage() {
         setPlano(planoData);
       }
 
-      if (itensRes.ok) {
-        const itensData = await itensRes.json();
-        setDespesas(itensData);
+      // OMs disponíveis para o rateio = todas as OMs do sistema. Escolher
+      // uma OM destino que ainda não participa da operação a adiciona
+      // automaticamente (com teto R$ 0) ao salvar a despesa.
+      if (omsRes.ok) {
+        setOms(await omsRes.json());
+        setOmsLoading(false);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -95,36 +125,11 @@ export default function PlanoTrabalhoPage() {
     }
   };
 
-  const fetchOms = async () => {
-    try {
-      const response = await fetch("/api/organizacoes");
-      if (response.ok) {
-        const data = await response.json();
-        setOms(data);
-      }
-    } catch (error) {
-      console.error("Error fetching OMs:", error);
-    }
-  };
-
-  const fetchNaturezas = async () => {
-    try {
-      const response = await fetch("/api/naturezas");
-      if (response.ok) {
-        const data = await response.json();
-        setNaturezas(data);
-      }
-    } catch (error) {
-      console.error("Error fetching naturezas:", error);
-    }
-  };
-
   const fetchCurrentUser = async () => {
     try {
       const response = await fetch("/api/auth/me");
       if (response.ok) {
         const data = await response.json();
-        setCurrentUserRole(data.role);
         if (data.om) {
           setUserOm({
             id: data.om.id,
@@ -138,65 +143,13 @@ export default function PlanoTrabalhoPage() {
     }
   };
 
-  // Verifica se o usuário atual pode aprovar no nível atual do plano
-  // Fluxo simplificado: apenas 1 nível de aprovação (S4)
-  const canApproveCurrentLevel = (): boolean => {
-    if (!plano || !currentUserRole || !plano.nivelAprovacaoAtual) {
-      return false;
-    }
+  // A permissão de aprovar no nível atual vem do backend (cadeia dinâmica por hierarquia de OM)
+  const canApproveCurrentLevel = (): boolean =>
+    plano?.podeAprovarNivelAtual === true;
 
-    // SUPER_ADMIN pode aprovar em qualquer nível
-    if (currentUserRole === "SUPER_ADMIN") return true;
-
-    // Apenas S4 pode aprovar (nível 1 é o único)
-    if (plano.nivelAprovacaoAtual === 1) {
-      return currentUserRole === "S4";
-    }
-
-    return false;
-  };
-
-  const handleAddItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const valorTotal =
-      parseFloat(newItem.valorUnitario) * parseFloat(newItem.quantidade);
-
-    try {
-      const response = await fetch(`/api/planos/${id}/itens`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          descricao: newItem.descricao,
-          valorUnitario: parseFloat(newItem.valorUnitario),
-          quantidade: parseFloat(newItem.quantidade),
-          valorTotal,
-          omId: newItem.omId,
-          naturezaId: newItem.naturezaId,
-        }),
-      });
-
-      if (response.ok) {
-        const novoItem = await response.json();
-        setDespesas([...despesas, novoItem]);
-        setNewItem({
-          descricao: "",
-          valorUnitario: "",
-          quantidade: "",
-          omId: "",
-          naturezaId: "",
-        });
-        setShowAddItem(false);
-      } else {
-        const error = await response.json();
-        console.error("Error response:", error);
-        alert(`Erro ao adicionar item: ${error.error || "Erro desconhecido"}`);
-      }
-    } catch (error) {
-      console.error("Error adding item:", error);
-      alert("Erro ao adicionar item");
-    }
-  };
+  const nivelAtualCadeia = plano?.cadeiaAprovacao?.find(
+    (n) => n.status === "atual"
+  );
 
   const handleEnviarAnalise = async () => {
     if (
@@ -250,28 +203,137 @@ export default function PlanoTrabalhoPage() {
     }
   };
 
-  const handleReprovar = async () => {
-    const motivo = prompt("Motivo da reprovação:");
-    if (!motivo) return;
+  const handleDevolver = async () => {
+    if (!motivoDevolucao.trim()) {
+      setErroDevolucao("Informe o motivo da devolução.");
+      return;
+    }
 
+    setIsDevolvendo(true);
+    setErroDevolucao("");
     try {
       const response = await fetch(`/api/planos/${id}/aprovar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao: "REPROVADO", motivo }),
+        body: JSON.stringify({ acao: "REPROVADO", motivo: motivoDevolucao }),
       });
 
+      const data = await response.json();
       if (response.ok) {
-        alert("Plano reprovado!");
+        setShowDevolverModal(false);
+        setMotivoDevolucao("");
+        alert(
+          data.message ||
+            "Plano devolvido para correção. O responsável poderá editar e reenviar."
+        );
         fetchData();
+      } else {
+        setErroDevolucao(data.error || "Erro ao devolver plano");
       }
     } catch (error) {
       console.error("Error rejecting:", error);
+      setErroDevolucao("Erro ao devolver plano");
+    } finally {
+      setIsDevolvendo(false);
     }
   };
 
-  const calcularTotal = () => {
-    return despesas.reduce((sum, item) => sum + Number(item.valorCalculado), 0);
+  const handleFecharImportarModal = () => {
+    setShowImportarModal(false);
+    setArquivoImportar(null);
+    setPreviewImportacao(null);
+    setErroImportacao("");
+  };
+
+  const handlePreVisualizarImportacao = async () => {
+    if (!arquivoImportar) return;
+
+    setIsImportando(true);
+    setErroImportacao("");
+    try {
+      const formData = new FormData();
+      formData.append("file", arquivoImportar);
+      formData.append("confirmar", "false");
+
+      const response = await fetch(`/api/planos/${id}/importar`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setErroImportacao(data.error || "Erro ao ler o arquivo");
+        return;
+      }
+
+      setPreviewImportacao({
+        itens: data.itens,
+        errosLeitura: data.errosLeitura || [],
+      });
+    } catch (error) {
+      console.error("Erro ao pré-visualizar importação:", error);
+      setErroImportacao("Erro ao ler o arquivo");
+    } finally {
+      setIsImportando(false);
+    }
+  };
+
+  const handleConfirmarImportacao = async () => {
+    if (!arquivoImportar) return;
+
+    setIsImportando(true);
+    setErroImportacao("");
+    try {
+      const formData = new FormData();
+      formData.append("file", arquivoImportar);
+      formData.append("confirmar", "true");
+
+      const response = await fetch(`/api/planos/${id}/importar`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setErroImportacao(data.error || "Erro ao importar");
+        return;
+      }
+
+      alert(
+        `${data.criados} despesa(s) importada(s)` +
+          (data.puladas > 0 ? ` (${data.puladas} com erro, não importadas)` : "")
+      );
+      handleFecharImportarModal();
+      fetchData();
+    } catch (error) {
+      console.error("Erro ao confirmar importação:", error);
+      setErroImportacao("Erro ao importar");
+    } finally {
+      setIsImportando(false);
+    }
+  };
+
+  const handleAssinarGovBr = async () => {
+    if (!nomeAssinante.trim()) {
+      setErroAssinatura("Informe o nome da autoridade que vai assinar.");
+      return;
+    }
+    setIsAssinando(true);
+    setErroAssinatura("");
+    try {
+      // Exporta o PDF com o nome/posto informados na assinatura e abre o
+      // portal de assinatura do gov.br; o usuário faz o upload do arquivo
+      // baixado manualmente no portal.
+      await handleGerarPdf({
+        nomeAssinante: nomeAssinante.trim(),
+        postoAssinante: postoAssinante.trim() || undefined,
+        funcaoAssinante: funcaoAssinante.trim() || undefined,
+      });
+      window.open("https://assinador.iti.br", "_blank", "noopener,noreferrer");
+      setShowAssinarModal(false);
+    } finally {
+      setIsAssinando(false);
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -290,7 +352,7 @@ export default function PlanoTrabalhoPage() {
     setShowPdfModal(true);
   };
 
-  const handleGerarPdf = async () => {
+  const handleGerarPdf = async (opcoesExtra?: Partial<OpcoesPdf>) => {
     if (!plano) return;
 
     setIsGeneratingPdf(true);
@@ -301,18 +363,74 @@ export default function PlanoTrabalhoPage() {
         throw new Error("Erro ao carregar dados do plano");
       }
       const planoCompleto = await response.json();
-      await gerarPdfPlanoTrabalho(
-        planoCompleto,
-        planoCompleto.operacao,
-        planoCompleto.responsavel,
-        pdfOpcoes
-      );
+      const opcoesFinais = { ...pdfOpcoes, ...opcoesExtra };
+      if (
+        planoCompleto.tipo === "OPERACIONAL_GND3" ||
+        planoCompleto.tipo === "OPERACIONAL_GND4"
+      ) {
+        await gerarPdfPlanoTrabalhoOperacional(
+          planoCompleto,
+          planoCompleto.operacao,
+          planoCompleto.responsavel,
+          opcoesFinais
+        );
+      } else {
+        await gerarPdfPlanoTrabalho(
+          planoCompleto,
+          planoCompleto.operacao,
+          planoCompleto.responsavel,
+          opcoesFinais
+        );
+      }
       setShowPdfModal(false);
     } catch (error) {
       console.error("Erro ao gerar PDF:", error);
       alert("Erro ao gerar PDF. Tente novamente.");
     } finally {
       setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleGerarXlsx = async () => {
+    if (!plano) return;
+
+    setIsGeneratingXlsx(true);
+    try {
+      const response = await fetch(`/api/planos/${id}?incluirDespesas=true`);
+      if (!response.ok) {
+        throw new Error("Erro ao carregar dados do plano");
+      }
+      const planoCompleto = await response.json();
+      if (
+        planoCompleto.tipo === "OPERACIONAL_GND3" ||
+        planoCompleto.tipo === "OPERACIONAL_GND4"
+      ) {
+        const { gerarXlsxPlanoTrabalhoOperacional } = await import(
+          "@/lib/xlsx/gerarXlsxPlanoTrabalhoOperacional"
+        );
+        await gerarXlsxPlanoTrabalhoOperacional(
+          planoCompleto,
+          planoCompleto.operacao
+        );
+      } else if (planoCompleto.tipo === "RACAO_R2") {
+        const { gerarXlsxPlanoR2 } = await import("@/lib/xlsx/gerarXlsxPlanoR2");
+        await gerarXlsxPlanoR2(planoCompleto);
+      } else if (planoCompleto.tipo === "MUNICAO") {
+        const { gerarXlsxPlanoMunicao } = await import(
+          "@/lib/xlsx/gerarXlsxPlanoMunicao"
+        );
+        await gerarXlsxPlanoMunicao(planoCompleto);
+      } else {
+        const { gerarXlsxPlanoTrabalho } = await import(
+          "@/lib/xlsx/gerarXlsxPlanoTrabalho"
+        );
+        await gerarXlsxPlanoTrabalho(planoCompleto, planoCompleto.operacao);
+      }
+    } catch (error) {
+      console.error("Erro ao gerar XLSX:", error);
+      alert("Erro ao gerar XLSX. Tente novamente.");
+    } finally {
+      setIsGeneratingXlsx(false);
     }
   };
 
@@ -331,25 +449,76 @@ export default function PlanoTrabalhoPage() {
   return (
     <div>
       <div className="mb-6">
-        <Link
-          href="/dashboard/planos"
-          className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-4"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Voltar para Planos
-        </Link>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4 mb-4">
+          <Link
+            href={`/dashboard/operacoes/${plano.operacaoId}`}
+            className="inline-flex items-center text-gray-600 hover:text-gray-900"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Voltar à Operação: {plano.operacao.nome}
+          </Link>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{plano.titulo}</h1>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 break-words">{plano.titulo}</h1>
+              {plano.importado && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+                  Importado{plano.origemImportacao ? ` — origem: ${plano.origemImportacao}` : ""}
+                </span>
+              )}
+            </div>
             <p className="text-gray-600 mt-1">
-              Operação: {plano.operacao.nome} | Versão: {plano.versao}
+              Operação:{" "}
+              <Link
+                href={`/dashboard/operacoes/${plano.operacaoId}`}
+                className="hover:underline hover:text-blue-700"
+              >
+                {plano.operacao.nome}
+              </Link>{" "}
+              | Versão: {plano.versao}
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={handleGerarPdf}>
-              <FileDown className="w-4 h-4 mr-2" />
-              Exportar PDF
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <DropdownMenu
+              label="Mais ações"
+              icon={<MoreHorizontal className="w-4 h-4" />}
+              items={[
+                ...(plano.tipo !== "RACAO_R2" && plano.tipo !== "MUNICAO"
+                  ? [
+                      {
+                        label: "Exportar PDF",
+                        icon: <FileDown className="w-4 h-4" />,
+                        onClick: handleGerarPdf,
+                      },
+                    ]
+                  : []),
+                {
+                  label: isGeneratingXlsx ? "Gerando..." : "Exportar XLSX",
+                  icon: <FileDown className="w-4 h-4" />,
+                  onClick: handleGerarXlsx,
+                  disabled: isGeneratingXlsx,
+                },
+                ...(plano.status === "RASCUNHO"
+                  ? [
+                      {
+                        label: "Importar XLSX",
+                        icon: <Upload className="w-4 h-4" />,
+                        onClick: () => setShowImportarModal(true),
+                      },
+                    ]
+                  : []),
+                {
+                  label: "Assinar no gov.br",
+                  icon: <PenLine className="w-4 h-4" />,
+                  onClick: () => {
+                    setErroAssinatura("");
+                    setShowAssinarModal(true);
+                  },
+                  separatorBefore: true,
+                },
+              ]}
+            />
             {plano.status === "RASCUNHO" && (
               <Button variant="primary" onClick={handleEnviarAnalise}>
                 <Check className="w-4 h-4 mr-2" />
@@ -362,9 +531,16 @@ export default function PlanoTrabalhoPage() {
                   <Check className="w-4 h-4 mr-2" />
                   Aprovar
                 </Button>
-                <Button variant="danger" onClick={handleReprovar}>
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    setErroDevolucao("");
+                    setMotivoDevolucao("");
+                    setShowDevolverModal(true);
+                  }}
+                >
                   <X className="w-4 h-4 mr-2" />
-                  Reprovar
+                  Devolver para Correção
                 </Button>
               </>
             )}
@@ -400,18 +576,14 @@ export default function PlanoTrabalhoPage() {
                     <>
                       <span className="font-semibold">
                         Aguardando aprovação do nível{" "}
-                        {plano.nivelAprovacaoAtual}/3:{" "}
-                        {
-                          {
-                            1: "Comandante da OM",
-                            2: "Comandante da Brigada",
-                            3: "Comandante do CMA",
-                          }[plano.nivelAprovacaoAtual]
-                        }
+                        {plano.nivelAprovacaoAtual}/
+                        {plano.cadeiaAprovacao?.length ?? "?"}
+                        {nivelAtualCadeia &&
+                          `: S4 ${nivelAtualCadeia.omSigla}`}
                       </span>
                       {canApproveCurrentLevel() && (
                         <span className="block mt-1 text-green-700 font-semibold">
-                          ✓ Você pode aprovar/reprovar este plano
+                          ✓ Você pode aprovar ou devolver este plano
                         </span>
                       )}
                     </>
@@ -428,7 +600,7 @@ export default function PlanoTrabalhoPage() {
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="text-sm text-gray-600">Status</div>
           <div className="text-lg font-semibold text-gray-900">
-            {plano.status.replace("_", " ")}
+            {getStatusPlanoLabel(plano.status)}
           </div>
         </div>
         <div className="bg-white p-4 rounded-lg border border-gray-200">
@@ -451,7 +623,15 @@ export default function PlanoTrabalhoPage() {
           <DespesasLogistico
             planoId={id}
             oms={oms}
-            operacao={plano.operacao as any}
+            loadingOms={omsLoading}
+            operacao={{
+              id: plano.operacao.id,
+              nome: plano.operacao.nome,
+              efetivo: plano.operacao.efetivoMil,
+              dataInicio: String(plano.operacao.dataInicio),
+              dataFinal: String(plano.operacao.dataFinal),
+              diasTotais: plano.operacao.diasTotais,
+            }}
             canEdit={plano.status === "RASCUNHO"}
             onRefresh={fetchData}
             userOm={userOm}
@@ -465,211 +645,42 @@ export default function PlanoTrabalhoPage() {
                 : null
             }
           />
-        ) : (
-          <>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Despesas</h2>
-              <Button size="sm" onClick={() => setShowAddItem(!showAddItem)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Adicionar
-              </Button>
-            </div>
-
-            {showAddItem && (
-              <form
-                onSubmit={handleAddItem}
-                className="mb-6 p-4 bg-military-50 rounded-lg space-y-4 border border-military-200"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-military-900 mb-1">
-                      Descrição *
-                    </label>
-                    <Input
-                      value={newItem.descricao}
-                      onChange={(e) =>
-                        setNewItem({ ...newItem, descricao: e.target.value })
-                      }
-                      required
-                      placeholder="Ex: Aquisição de gêneros alimentícios..."
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-military-900 mb-1">
-                      Organização Militar *
-                    </label>
-                    <select
-                      value={newItem.omId}
-                      onChange={(e) =>
-                        setNewItem({ ...newItem, omId: e.target.value })
-                      }
-                      className="w-full px-4 py-2 border border-olive-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 focus:border-transparent bg-white"
-                      required
-                    >
-                      <option value="">Selecione uma OM</option>
-                      {oms.map((om) => (
-                        <option key={om.id} value={om.id}>
-                          {om.sigla} - {om.nome}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-military-900 mb-1">
-                      Natureza de Despesa *
-                    </label>
-                    <select
-                      value={newItem.naturezaId}
-                      onChange={(e) =>
-                        setNewItem({ ...newItem, naturezaId: e.target.value })
-                      }
-                      className="w-full px-4 py-2 border border-olive-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 focus:border-transparent bg-white"
-                      required
-                    >
-                      <option value="">Selecione uma natureza</option>
-                      {naturezas.map((natureza) => (
-                        <option key={natureza.id} value={natureza.id}>
-                          {natureza.codigo} - {natureza.nome}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-military-900 mb-1">
-                      Valor Unitário (R$) *
-                    </label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={newItem.valorUnitario}
-                      onChange={(e) =>
-                        setNewItem({
-                          ...newItem,
-                          valorUnitario: e.target.value,
-                        })
-                      }
-                      required
-                      placeholder="0.00"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-military-900 mb-1">
-                      Quantidade *
-                    </label>
-                    <Input
-                      type="number"
-                      step="0.001"
-                      min="0.001"
-                      value={newItem.quantidade}
-                      onChange={(e) =>
-                        setNewItem({ ...newItem, quantidade: e.target.value })
-                      }
-                      required
-                      placeholder="1"
-                    />
-                  </div>
-                </div>
-
-                {newItem.valorUnitario && newItem.quantidade && (
-                  <div className="bg-white p-3 rounded border border-military-200">
-                    <span className="text-sm text-olive-700">
-                      Valor Total:{" "}
-                    </span>
-                    <span className="text-lg font-bold text-military-700">
-                      {formatCurrency(
-                        parseFloat(newItem.valorUnitario) *
-                          parseFloat(newItem.quantidade)
-                      )}
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <Button type="submit" size="sm">
-                    Adicionar
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => setShowAddItem(false)}
-                  >
-                    Cancelar
-                  </Button>
-                </div>
-              </form>
-            )}
-
-            {/* Tabela de Itens */}
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left p-3 text-sm font-medium text-gray-700">
-                      OM
-                    </th>
-                    <th className="text-left p-3 text-sm font-medium text-gray-700">
-                      Natureza
-                    </th>
-                    <th className="text-left p-3 text-sm font-medium text-gray-700">
-                      Descrição
-                    </th>
-                    <th className="text-right p-3 text-sm font-medium text-gray-700">
-                      Valor Unit.
-                    </th>
-                    <th className="text-right p-3 text-sm font-medium text-gray-700">
-                      Qtd
-                    </th>
-                    <th className="text-right p-3 text-sm font-medium text-gray-700">
-                      Total
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {despesas.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="text-center p-8 text-gray-500">
-                        Nenhum item cadastrado
-                      </td>
-                    </tr>
-                  ) : (
-                    despesas.map((item) => (
-                      <tr
-                        key={item.id}
-                        className="border-b border-gray-100 hover:bg-gray-50"
-                      >
-                        <td className="p-3 text-sm text-gray-600">
-                          {item.descricao}
-                        </td>
-                        <td className="p-3 text-sm text-gray-900 text-right">
-                          {formatCurrency(Number(item.valorCalculado))}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-gray-300">
-                    <td
-                      colSpan={5}
-                      className="p-3 text-right font-semibold text-gray-900"
-                    >
-                      Total:
-                    </td>
-                    <td className="p-3 text-right font-bold text-blue-600 text-lg">
-                      {formatCurrency(calcularTotal())}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </>
-        )}
+        ) : plano.tipo === "OPERACIONAL_GND3" || plano.tipo === "OPERACIONAL_GND4" ? (
+          <DespesasOperacionais
+            planoId={id}
+            planoTipo={plano.tipo}
+            oms={oms}
+            loadingOms={omsLoading}
+            canEdit={plano.status === "RASCUNHO"}
+            onRefresh={fetchData}
+            userOm={userOm}
+            planoOm={
+              plano.om
+                ? {
+                    id: plano.om.id,
+                    nome: plano.om.nome,
+                    sigla: plano.om.sigla,
+                  }
+                : null
+            }
+          />
+        ) : plano.tipo === "RACAO_R2" ? (
+          <ItensRacaoR2
+            planoId={id}
+            oms={oms}
+            loadingOms={omsLoading}
+            canEdit={plano.status === "RASCUNHO"}
+            onRefresh={fetchData}
+          />
+        ) : plano.tipo === "MUNICAO" ? (
+          <ItensMunicao
+            planoId={id}
+            oms={oms}
+            loadingOms={omsLoading}
+            canEdit={plano.status === "RASCUNHO"}
+            onRefresh={fetchData}
+          />
+        ) : null}
       </div>
 
       {/* Status de Aprovação e Histórico */}
@@ -678,8 +689,167 @@ export default function PlanoTrabalhoPage() {
           <StatusAprovacao
             nivelAtual={plano.nivelAprovacaoAtual}
             status={plano.status}
+            cadeia={plano.cadeiaAprovacao}
           />
           <HistoricoAprovacoes planoId={id} />
+        </div>
+      )}
+
+      {/* Modal de Assinatura (nome/posto/função da autoridade) */}
+      <ModalAssinarGovBr
+        isOpen={showAssinarModal}
+        onClose={() => setShowAssinarModal(false)}
+        onConfirm={handleAssinarGovBr}
+        isSubmitting={isAssinando}
+        erro={erroAssinatura}
+        nomeAssinante={nomeAssinante}
+        setNomeAssinante={setNomeAssinante}
+        postoAssinante={postoAssinante}
+        setPostoAssinante={setPostoAssinante}
+        funcaoAssinante={funcaoAssinante}
+        setFuncaoAssinante={setFuncaoAssinante}
+      />
+
+      {/* Modal de Devolução */}
+      {showDevolverModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Devolver plano para correção
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              O plano voltará ao status de rascunho e o responsável poderá
+              corrigir e reenviar para análise. Informe o motivo da devolução —
+              ele ficará registrado no histórico.
+            </p>
+            <textarea
+              value={motivoDevolucao}
+              onChange={(e) => setMotivoDevolucao(e.target.value)}
+              rows={4}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+              placeholder="Ex: Memória de cálculo da despesa de combustível incompleta; revisar rateio entre as OMs."
+              autoFocus
+            />
+            {erroDevolucao && (
+              <p className="text-sm text-red-600 mt-2">{erroDevolucao}</p>
+            )}
+            <div className="flex flex-wrap justify-end gap-2 mt-4">
+              <Button
+                variant="secondary"
+                onClick={() => setShowDevolverModal(false)}
+                disabled={isDevolvendo}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="danger"
+                onClick={handleDevolver}
+                isLoading={isDevolvendo}
+              >
+                <X className="w-4 h-4 mr-2" />
+                Devolver
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Importação (round-trip xlsx) */}
+      {showImportarModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[calc(100vh-4rem)] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              Importar despesas de um arquivo XLSX
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Use um arquivo .xlsx exportado pelo próprio sistema (deste ou de
+              outro plano da mesma OM e do mesmo tipo). As despesas serão
+              adicionadas às já existentes neste plano.
+            </p>
+
+            <input
+              type="file"
+              accept=".xlsx"
+              onChange={(e) => {
+                setArquivoImportar(e.target.files?.[0] || null);
+                setPreviewImportacao(null);
+                setErroImportacao("");
+              }}
+              className="block w-full text-sm text-gray-600 mb-4"
+            />
+
+            {erroImportacao && (
+              <p className="text-sm text-red-600 mb-4">{erroImportacao}</p>
+            )}
+
+            {previewImportacao && (
+              <div className="mb-4 border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-72 overflow-y-auto">
+                {previewImportacao.errosLeitura.map((e, idx) => (
+                  <div key={`leitura-${idx}`} className="p-3 bg-red-50 text-sm text-red-700">
+                    Linha {e.linha}: {e.mensagem}
+                  </div>
+                ))}
+                {previewImportacao.itens.map((item) => (
+                  <div key={item.linha} className="p-3 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {item.resumo}
+                      </p>
+                      <p className="text-xs text-gray-500">Linha {item.linha}</p>
+                    </div>
+                    {item.erros.length === 0 ? (
+                      <span className="text-xs font-medium text-green-700 bg-green-100 px-2 py-1 rounded-full whitespace-nowrap">
+                        Pronto para importar
+                      </span>
+                    ) : (
+                      <span className="text-xs font-medium text-red-700 bg-red-100 px-2 py-1 rounded-full whitespace-nowrap">
+                        {item.erros.join("; ")}
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {previewImportacao.itens.length === 0 &&
+                  previewImportacao.errosLeitura.length === 0 && (
+                    <p className="p-3 text-sm text-gray-600">
+                      Nenhuma despesa encontrada para este plano neste arquivo.
+                    </p>
+                  )}
+              </div>
+            )}
+
+            <div className="flex flex-wrap justify-end gap-2 mt-4">
+              <Button
+                variant="secondary"
+                onClick={handleFecharImportarModal}
+                disabled={isImportando}
+              >
+                Cancelar
+              </Button>
+              {!previewImportacao ? (
+                <Button
+                  variant="primary"
+                  onClick={handlePreVisualizarImportacao}
+                  disabled={!arquivoImportar || isImportando}
+                >
+                  {isImportando && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Pré-visualizar
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  onClick={handleConfirmarImportacao}
+                  disabled={
+                    isImportando ||
+                    !previewImportacao.itens.some((i) => i.erros.length === 0)
+                  }
+                >
+                  {isImportando && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  <Upload className="w-4 h-4 mr-2" />
+                  Confirmar Importação
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

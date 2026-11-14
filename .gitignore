@@ -24,6 +24,12 @@
 .DS_Store
 *.pem
 
+# IDE
+.idea/
+
+# lockfile do gerenciador alternativo — o projeto usa yarn.lock como fonte da verdade
+package-lock.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -43,9 +49,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# prisma
-/prisma/migrations
 
 # backups
 /backups

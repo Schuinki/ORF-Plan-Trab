@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ArrowLeft, Plus, X, AlertCircle } from "lucide-react";
 import Link from "next/link";
+import { SeletorOmBusca } from "@/components/operacoes/SeletorOmBusca";
 
 interface OM {
   id: string;
@@ -33,7 +34,6 @@ export default function NovaOperacaoPage() {
     efetivoExt: "",
     dataInicio: "",
     dataFinal: "",
-    prioridade: "MEDIA",
     finalidade: "",
     motivacao: "",
     consequenciaNaoAtendimento: "",
@@ -45,11 +45,11 @@ export default function NovaOperacaoPage() {
     []
   );
 
-  // Carregar OMs elegíveis como participantes (filhas diretas de CMA)
+  // Carregar todas as OMs para seleção como participantes
   useEffect(() => {
     async function loadOms() {
       try {
-        const response = await fetch("/api/organizacoes/elegiveis-participantes");
+        const response = await fetch("/api/organizacoes");
         if (response.ok) {
           const data = await response.json();
           setOms(data);
@@ -186,7 +186,7 @@ export default function NovaOperacaoPage() {
         <h1 className="text-3xl font-bold text-gray-900">Nova Operação</h1>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Dados básicos */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -223,25 +223,6 @@ export default function NovaOperacaoPage() {
               placeholder="500"
               min="1"
             />
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Prioridade <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.prioridade}
-                onChange={(e) =>
-                  setFormData({ ...formData, prioridade: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                <option value="BAIXA">Baixa</option>
-                <option value="MEDIA">Média</option>
-                <option value="ALTA">Alta</option>
-                <option value="CRITICA">Crítica</option>
-              </select>
-            </div>
 
             <Input
               label="Valor Limite Total (R$)"
@@ -313,7 +294,7 @@ export default function NovaOperacaoPage() {
 
           {/* OMs Participantes */}
           <div className="border-t pt-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
               <div>
                 <h3 className="text-lg font-medium text-gray-900">
                   OMs Participantes
@@ -328,6 +309,7 @@ export default function NovaOperacaoPage() {
                 variant="secondary"
                 onClick={handleAddOm}
                 disabled={loadingOms}
+                className="w-full sm:w-auto"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Adicionar OM
@@ -339,52 +321,47 @@ export default function NovaOperacaoPage() {
                 {omsParticipantes.map((omPart, index) => (
                   <div
                     key={index}
-                    className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg"
+                    className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4 p-4 bg-gray-50 rounded-lg"
                   >
                     <div className="flex-1">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Organização Militar
                       </label>
-                      <select
+                      <SeletorOmBusca
+                        oms={omsDisponiveis(index)}
                         value={omPart.omId}
-                        onChange={(e) =>
-                          handleOmChange(index, "omId", e.target.value)
+                        onChange={(omId) =>
+                          handleOmChange(index, "omId", omId)
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
-                      >
-                        <option value="">Selecione uma OM</option>
-                        {omsDisponiveis(index).map((om) => (
-                          <option key={om.id} value={om.id}>
-                            {om.sigla} - {om.nome}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="w-48">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Valor Limite (R$)
-                      </label>
-                      <input
-                        type="number"
-                        value={omPart.valorLimite}
-                        onChange={(e) =>
-                          handleOmChange(index, "valorLimite", e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="0.00"
-                        min="0"
-                        step="0.01"
-                        required
+                        disabled={loadingOms}
                       />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveOm(index)}
-                      className="mt-6 p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-end gap-2 sm:w-48 sm:flex-shrink-0">
+                      <div className="flex-1 sm:w-48">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Valor Limite (R$)
+                        </label>
+                        <input
+                          type="number"
+                          value={omPart.valorLimite}
+                          onChange={(e) =>
+                            handleOmChange(index, "valorLimite", e.target.value)
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="0.00"
+                          min="0"
+                          step="0.01"
+                          required
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveOm(index)}
+                        className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded flex-shrink-0"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
 
@@ -396,7 +373,7 @@ export default function NovaOperacaoPage() {
                       : "bg-blue-50 border border-blue-200"
                   }`}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>
                       <p className="text-sm font-medium text-gray-700">
                         Soma dos valores alocados:
@@ -410,7 +387,7 @@ export default function NovaOperacaoPage() {
                       </p>
                     </div>
                     {valorLimiteTotal > 0 && (
-                      <div className="text-right">
+                      <div className="sm:text-right">
                         <p className="text-sm font-medium text-gray-700">
                           {excedeLimite ? "Excedente:" : "Disponível:"}
                         </p>
@@ -453,12 +430,12 @@ export default function NovaOperacaoPage() {
             </div>
           )}
 
-          <div className="flex gap-4">
-            <Button type="submit" isLoading={isLoading} disabled={excedeLimite}>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <Button type="submit" isLoading={isLoading} disabled={excedeLimite} className="w-full sm:w-auto">
               Criar Operação
             </Button>
-            <Link href="/dashboard/operacoes">
-              <Button type="button" variant="secondary">
+            <Link href="/dashboard/operacoes" className="w-full sm:w-auto">
+              <Button type="button" variant="secondary" className="w-full sm:w-auto">
                 Cancelar
               </Button>
             </Link>

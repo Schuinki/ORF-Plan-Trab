@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Loader2, AlertCircle, Edit } from "lucide-react";
+import { Plus, Trash2, Loader2, AlertCircle, Edit, Zap } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 import { ModalCriarDespesa } from "./ModalCriarDespesa";
+import { ModalBlotterTabela } from "./ModalBlotterTabela";
+import { getClasseNome } from "@/lib/classes";
 import type { OMSelect, OperacaoWithEfetivo, UserOM } from "@/types/despesas";
 
 /**
@@ -15,6 +18,8 @@ interface Despesa {
   parametros: unknown;
   valorCalculado: number;
   valorCombustivel: number | null;
+  importado?: boolean;
+  valorImportadoOriginal?: number | null;
   classe: {
     id: string;
     nome: string;
@@ -27,9 +32,16 @@ interface Despesa {
   } | null;
   oms: {
     id: string;
-    omId: string;
+    omDestinoId: string;
+    omCompradoraId: string;
     percentual: number;
-    om: {
+    omDestino: {
+      id: string;
+      nome: string;
+      sigla: string;
+      codUG: string;
+    };
+    omCompradora: {
       id: string;
       nome: string;
       sigla: string;
@@ -53,6 +65,7 @@ interface Despesa {
 interface DespesasLogisticoProps {
   planoId: string;
   oms: OMSelect[];
+  loadingOms?: boolean;
   operacao: OperacaoWithEfetivo;
   canEdit: boolean;
   onRefresh?: () => void | Promise<void>;
@@ -63,6 +76,7 @@ interface DespesasLogisticoProps {
 export function DespesasLogistico({
   planoId,
   oms,
+  loadingOms,
   operacao,
   canEdit,
   onRefresh,
@@ -72,6 +86,7 @@ export function DespesasLogistico({
   const [loading, setLoading] = useState(true);
   const [despesas, setDespesas] = useState<Despesa[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showBlotter, setShowBlotter] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [despesaToEdit, setDespesaToEdit] = useState<any | null>(null);
 
@@ -94,11 +109,22 @@ export function DespesasLogistico({
     }
   };
 
-  const handleDespesaSuccess = async () => {
+  const handleDespesaSuccess = async (
+    omsAdicionadas?: { id: string; sigla: string }[]
+  ) => {
     await carregarDespesas();
     // Refresh parent data to sync total values
     if (onRefresh) {
       await onRefresh();
+    }
+    if (omsAdicionadas && omsAdicionadas.length > 0) {
+      alert(
+        `${omsAdicionadas
+          .map((om) => om.sigla)
+          .join(", ")} ${
+          omsAdicionadas.length > 1 ? "foram adicionadas" : "foi adicionada"
+        } automaticamente como participante(s) desta operação, com teto R$ 0,00. Ajuste o valor limite na página da Operação.`
+      );
     }
   };
 
@@ -114,13 +140,18 @@ export function DespesasLogistico({
         ? Number(despesa.valorCombustivel)
         : null,
       oms: despesa.oms.map((om) => ({
-        omId: om.omId,
+        omDestinoId: om.omDestinoId,
+        omCompradoraId: om.omCompradoraId,
         percentual: Number(om.percentual),
       })),
       despesasNaturezas: despesa.despesasNaturezas.map((nat) => ({
         naturezaId: nat.naturezaId,
         percentual: Number(nat.percentual),
       })),
+      importado: despesa.importado,
+      valorImportadoOriginal: despesa.valorImportadoOriginal
+        ? Number(despesa.valorImportadoOriginal)
+        : null,
     });
     setIsModalOpen(true);
   };
@@ -208,7 +239,7 @@ export function DespesasLogistico({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">
             Despesas Logísticas
@@ -224,15 +255,32 @@ export function DespesasLogistico({
           </p>
         </div>
         {canEdit && (
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Nova Despesa
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setShowBlotter(true)}>
+              <Zap className="w-4 h-4 mr-2" />
+              Entrada Rápida
+            </Button>
+            <Button variant="primary" onClick={() => setIsModalOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Nova Despesa
+            </Button>
+          </div>
         )}
       </div>
+
+      {canEdit && (
+        <ModalBlotterTabela
+          isOpen={showBlotter}
+          onClose={() => setShowBlotter(false)}
+          planoId={planoId}
+          oms={oms}
+          loadingOms={loadingOms}
+          operacao={operacao}
+          onSuccess={handleDespesaSuccess}
+          userOm={userOm}
+          planoOm={planoOm}
+        />
+      )}
 
       {/* Lista de Despesas */}
       {despesas.length === 0 ? (
@@ -253,11 +301,11 @@ export function DespesasLogistico({
                 key={despesa.id}
                 className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
+                <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0 w-full">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-green-100 text-green-800">
-                        {despesa.classe.nome}
+                        {getClasseNome(despesa.classe.nome)}
                       </span>
                       {despesa.tipo && (
                         <span className="text-sm text-gray-600">
@@ -265,9 +313,14 @@ export function DespesasLogistico({
                           {despesa.tipo.isCombustivel && " (Combustível)"}
                         </span>
                       )}
+                      {despesa.importado && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-amber-100 text-amber-800">
+                          Importado
+                        </span>
+                      )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 mb-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
                       <div>
                         <p className="text-xs text-gray-500 mb-1">
                           Valor Total
@@ -276,6 +329,29 @@ export function DespesasLogistico({
                           {formatCurrency(Number(despesa.valorCalculado))}
                         </p>
                       </div>
+
+                      {despesa.importado &&
+                        despesa.valorImportadoOriginal != null && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">
+                              Valor Importado (original)
+                            </p>
+                            <p
+                              className={`text-lg font-bold ${
+                                Math.abs(
+                                  Number(despesa.valorImportadoOriginal) -
+                                    Number(despesa.valorCalculado)
+                                ) > 0.01
+                                  ? "text-amber-700"
+                                  : "text-gray-500"
+                              }`}
+                            >
+                              {formatCurrency(
+                                Number(despesa.valorImportadoOriginal)
+                              )}
+                            </p>
+                          </div>
+                        )}
 
                       {despesa.valorCombustivel !== null && (
                         <div>
@@ -309,9 +385,9 @@ export function DespesasLogistico({
                               {rateio.natureza.codigo} - {rateio.natureza.nome}
                             </span>
                             <span className="font-medium text-gray-900">
-                              R${" "}
-                              {Number(
-                                rateio.percentual * despesa.valorCalculado
+                              {formatCurrency(
+                                (Number(rateio.percentual) / 100) *
+                                  Number(despesa.valorCalculado)
                               )}{" "}
                               ({Number(rateio.percentual).toFixed(2)}%)
                             </span>
@@ -331,12 +407,18 @@ export function DespesasLogistico({
                             className="flex items-center justify-between text-xs"
                           >
                             <span className="text-gray-700">
-                              {rateio.om.sigla} - {rateio.om.nome}
+                              {rateio.omDestino.sigla} - {rateio.omDestino.nome}
+                              {rateio.omCompradoraId !== rateio.omDestinoId && (
+                                <span className="text-gray-400">
+                                  {" "}
+                                  (compra: {rateio.omCompradora.sigla})
+                                </span>
+                              )}
                             </span>
                             <span className="font-medium text-gray-900">
-                              R${" "}
-                              {Number(
-                                rateio.percentual * despesa.valorCalculado
+                              {formatCurrency(
+                                (Number(rateio.percentual) / 100) *
+                                  Number(despesa.valorCalculado)
                               )}{" "}
                               ({Number(rateio.percentual).toFixed(2)}%)
                             </span>
@@ -351,7 +433,7 @@ export function DespesasLogistico({
                   </div>
 
                   {canEdit && (
-                    <div className="flex items-center gap-2 ml-4">
+                    <div className="flex items-center gap-2 ml-0 sm:ml-4 self-end sm:self-auto shrink-0">
                       <button
                         onClick={() => handleEdit(despesa)}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
@@ -383,7 +465,7 @@ export function DespesasLogistico({
             <h4 className="text-sm font-semibold text-green-800 mb-3">
               Resumo Financeiro
             </h4>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <p className="text-xs text-green-700 mb-1">Total Geral</p>
                 <p className="text-2xl font-bold text-green-800">
@@ -434,6 +516,7 @@ export function DespesasLogistico({
           onClose={handleCloseModal}
           planoId={planoId}
           oms={oms}
+          loadingOms={loadingOms}
           operacao={operacao}
           onSuccess={handleDespesaSuccess}
           despesaToEdit={despesaToEdit}

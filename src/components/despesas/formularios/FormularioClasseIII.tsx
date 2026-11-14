@@ -460,7 +460,7 @@ export function FormularioClasseIII({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Adicionar Item
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -554,7 +554,7 @@ export function FormularioClasseIII({
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Média de Km percorridos por dia{" "}
@@ -647,7 +647,7 @@ export function FormularioClasseIII({
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                       Horas médias/dia <span className="text-red-500">*</span>

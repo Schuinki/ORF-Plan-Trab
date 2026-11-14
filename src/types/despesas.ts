@@ -75,7 +75,15 @@ export type DespesaWithRelations = Prisma.DespesaGetPayload<{
     };
     oms: {
       include: {
-        om: {
+        omDestino: {
+          select: {
+            id: true;
+            nome: true;
+            sigla: true;
+            codUG: true;
+          };
+        };
+        omCompradora: {
           select: {
             id: true;
             nome: true;
@@ -114,10 +122,14 @@ export interface UserOM {
 }
 
 /**
- * Rateio (distribution) of expense across OMs
+ * Rateio (distribution) of expense across OMs.
+ * omDestinoId: OM que recebe o recurso (aparece no carimbo do P Trab).
+ * omCompradoraId: OM/CODUG que efetivamente compra (usado na DOR/empenho).
+ * Na maioria dos casos as duas são a mesma OM.
  */
 export interface RateioOM {
-  omId: string;
+  omDestinoId: string;
+  omCompradoraId: string;
   percentual: number;
 }
 
@@ -219,7 +231,15 @@ export const despesaWithRelationsInclude =
     },
     oms: {
       include: {
-        om: {
+        omDestino: {
+          select: {
+            id: true,
+            nome: true,
+            sigla: true,
+            codUG: true,
+          },
+        },
+        omCompradora: {
           select: {
             id: true,
             nome: true,

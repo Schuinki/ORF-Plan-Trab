@@ -4,9 +4,11 @@ import { getCurrentUser } from "@/lib/auth";
 import { calcularDespesa } from "@/lib/calculos-despesas";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+import { autoAdicionarParticipante } from "@/lib/services/omParticipante";
 
 const rateioOMSchema = z.object({
-  omId: z.string().cuid("ID de OM inválido"),
+  omDestinoId: z.string().cuid("ID de OM destino inválido"),
+  omCompradoraId: z.string().cuid("ID de OM compradora inválido"),
   percentual: z.number().min(0.01).max(100),
 });
 
@@ -84,7 +86,15 @@ export async function GET(
         },
         oms: {
           include: {
-            om: {
+            omDestino: {
+              select: {
+                id: true,
+                nome: true,
+                sigla: true,
+                codUG: true,
+              },
+            },
+            omCompradora: {
               select: {
                 id: true,
                 nome: true,
@@ -139,7 +149,13 @@ export async function POST(
     // Verificar se plano existe e é LOGISTICO
     const plano = await prisma.planoTrabalho.findUnique({
       where: { id },
-      include: { operacao: true },
+      include: {
+        operacao: {
+          include: {
+            omsParticipantes: { select: { omId: true } },
+          },
+        },
+      },
     });
 
     if (!plano) {
@@ -156,12 +172,14 @@ export async function POST(
       );
     }
 
-    // Verificar bloqueio (plano em análise)
-    if (plano.status === "EM_ANALISE") {
+    // Verificar bloqueio (plano em análise ou já aprovado)
+    if (plano.status === "EM_ANALISE" || plano.status === "APROVADO") {
       return NextResponse.json(
         {
           error:
-            "Plano em análise não pode ter despesas adicionadas. Aguardando aprovação.",
+            plano.status === "EM_ANALISE"
+              ? "Plano em análise não pode ter despesas adicionadas. Aguardando aprovação."
+              : "Plano aprovado não pode ser alterado. É necessário devolvê-lo para correção.",
         },
         { status: 403 }
       );
@@ -271,6 +289,21 @@ export async function POST(
       );
     }
 
+    // Plano LOGISTICO sempre implica GND 3 — rejeitar naturezas de GND 4
+    const naturezasForaDoGnd = naturezasExistentes.filter(
+      (nat) => nat.gnd !== "GND 3"
+    );
+    if (naturezasForaDoGnd.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Naturezas de GND diferente de GND 3 não são permitidas em um plano Logístico: ${naturezasForaDoGnd
+            .map((nat) => nat.codigo)
+            .join(", ")}`,
+        },
+        { status: 400 }
+      );
+    }
+
     // Validar rateio de OMs (soma deve ser 100%)
     const somaPercentuais = oms.reduce((sum, om) => sum + om.percentual, 0);
     if (Math.abs(somaPercentuais - 100) > 0.01) {
@@ -283,92 +316,136 @@ export async function POST(
       );
     }
 
-    // Validar que todas as OMs existem
-    const omIds = oms.map((om) => om.omId);
+    // Validar que não há OM destino repetida no rateio (cada linha deve
+    // apontar para um destino distinto; a OM compradora pode repetir)
+    const omDestinoIds = oms.map((om) => om.omDestinoId);
+    if (new Set(omDestinoIds).size !== omDestinoIds.length) {
+      return NextResponse.json(
+        { error: "Há OMs destino repetidas no rateio" },
+        { status: 400 }
+      );
+    }
+
+    // Validar que todas as OMs (destino e compradora) existem
+    const todosOmIds = Array.from(
+      new Set([...omDestinoIds, ...oms.map((om) => om.omCompradoraId)])
+    );
     const omsExistentes = await prisma.organizacaoMilitar.findMany({
-      where: { id: { in: omIds } },
+      where: { id: { in: todosOmIds } },
     });
 
-    if (omsExistentes.length !== omIds.length) {
+    if (omsExistentes.length !== todosOmIds.length) {
       return NextResponse.json(
         { error: "Uma ou mais OMs não foram encontradas" },
         { status: 404 }
       );
     }
-    // Criar despesa com rateio
-    const despesa = await prisma.despesa.create({
-      data: {
-        descricao,
-        planoTrabalhoId: id,
-        classeId: classeId,
-        tipoId: tipoId,
-        parametros: parametros,
-        valorCalculado: valorTotal,
-        valorCombustivel,
-        oms: {
-          create: oms.map((om) => ({
-            omId: om.omId,
-            percentual: om.percentual,
-          })),
-        },
-        despesasNaturezas: {
-          create: naturezas.map((nat) => ({
-            naturezaId: nat.naturezaId,
-            percentual: nat.percentual,
-          })),
-        },
-      },
-      include: {
-        classe: {
-          select: {
-            nome: true,
-            descricao: true,
+
+    const omsExistentesPorId = new Map(omsExistentes.map((om) => [om.id, om]));
+
+    // Cria a despesa e, para cada OM destino que ainda não participa da
+    // operação, adiciona-a automaticamente (com teto R$ 0, a ser ajustado
+    // depois) em vez de rejeitar a despesa — a OM compradora nunca precisa
+    // participar, é só um detalhe de aquisição.
+    const { despesa, omsAdicionadas } = await prisma.$transaction(async (tx) => {
+      const omsAdicionadas: { id: string; sigla: string }[] = [];
+      for (const omDestinoId of new Set(omDestinoIds)) {
+        const { criado } = await autoAdicionarParticipante(
+          tx,
+          plano.operacaoId,
+          omDestinoId
+        );
+        if (criado) {
+          const om = omsExistentesPorId.get(omDestinoId);
+          if (om) omsAdicionadas.push({ id: om.id, sigla: om.sigla });
+        }
+      }
+
+      const despesa = await tx.despesa.create({
+        data: {
+          descricao,
+          planoTrabalhoId: id,
+          classeId: classeId,
+          tipoId: tipoId,
+          parametros: parametros,
+          valorCalculado: valorTotal,
+          valorCombustivel,
+          oms: {
+            create: oms.map((om) => ({
+              omDestinoId: om.omDestinoId,
+              omCompradoraId: om.omCompradoraId,
+              percentual: om.percentual,
+            })),
+          },
+          despesasNaturezas: {
+            create: naturezas.map((nat) => ({
+              naturezaId: nat.naturezaId,
+              percentual: nat.percentual,
+            })),
           },
         },
-        tipo: {
-          select: {
-            nome: true,
-            isCombustivel: true,
+        include: {
+          classe: {
+            select: {
+              nome: true,
+              descricao: true,
+            },
           },
-        },
-        oms: {
-          include: {
-            om: {
-              select: {
-                id: true,
-                nome: true,
-                sigla: true,
-                codUG: true,
+          tipo: {
+            select: {
+              nome: true,
+              isCombustivel: true,
+            },
+          },
+          oms: {
+            include: {
+              omDestino: {
+                select: {
+                  id: true,
+                  nome: true,
+                  sigla: true,
+                  codUG: true,
+                },
+              },
+              omCompradora: {
+                select: {
+                  id: true,
+                  nome: true,
+                  sigla: true,
+                  codUG: true,
+                },
+              },
+            },
+          },
+          despesasNaturezas: {
+            include: {
+              natureza: {
+                select: {
+                  id: true,
+                  codigo: true,
+                  nome: true,
+                  descricao: true,
+                },
               },
             },
           },
         },
-        despesasNaturezas: {
-          include: {
-            natureza: {
-              select: {
-                id: true,
-                codigo: true,
-                nome: true,
-                descricao: true,
-              },
-            },
-          },
+      });
+
+      // Recalculate total for the plano
+      const despesasTotal = await tx.despesa.aggregate({
+        where: { planoTrabalhoId: id },
+        _sum: { valorCalculado: true },
+      });
+
+      await tx.planoTrabalho.update({
+        where: { id },
+        data: {
+          valorTotalDespesas: despesasTotal._sum.valorCalculado || 0,
         },
-      },
-    });
+      });
 
-    // Recalculate total for the plano
-    const despesasTotal = await prisma.despesa.aggregate({
-      where: { planoTrabalhoId: id },
-      _sum: { valorCalculado: true },
-    });
-
-    await prisma.planoTrabalho.update({
-      where: { id },
-      data: {
-        valorTotalDespesas: despesasTotal._sum.valorCalculado || 0,
-      },
+      return { despesa, omsAdicionadas };
     });
 
     // Log de auditoria
@@ -383,11 +460,12 @@ export async function POST(
           classe: classe.nome,
           tipo: tipo?.nome || "Sem tipo",
           valorTotal: valorTotal,
+          omsAdicionadasComoParticipantes: omsAdicionadas,
         },
       },
     });
 
-    return NextResponse.json(despesa, { status: 201 });
+    return NextResponse.json({ ...despesa, omsAdicionadas }, { status: 201 });
   } catch (error) {
     console.error("Create despesa error:", error);
     return NextResponse.json(

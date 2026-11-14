@@ -113,8 +113,8 @@ export function HistoricoAprovacoes({ planoId }: HistoricoAprovacoesProps) {
                 : "border-red-200 bg-red-50"
             }`}
           >
-            <div className="flex items-start justify-between">
-              <div className="flex items-start space-x-3">
+            <div className="flex flex-col sm:flex-row items-start justify-between gap-2">
+              <div className="flex items-start space-x-3 min-w-0">
                 <div className="flex-shrink-0">
                   {aprovacao.acao === "APROVADO" ? (
                     <div className="flex items-center justify-center w-8 h-8 bg-green-100 rounded-full">
@@ -136,7 +136,9 @@ export function HistoricoAprovacoes({ planoId }: HistoricoAprovacoesProps) {
                           : "text-red-700"
                       }`}
                     >
-                      {aprovacao.acao === "APROVADO" ? "Aprovado" : "Reprovado"}
+                      {aprovacao.acao === "APROVADO"
+                        ? "Autorizado"
+                        : "Devolvido para correção"}
                     </span>
                     <span className="text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded">
                       {getRoleLabel(aprovacao.aprovador.role)}
@@ -158,17 +160,25 @@ export function HistoricoAprovacoes({ planoId }: HistoricoAprovacoesProps) {
                   </p>
 
                   {aprovacao.motivo && (
-                    <div className="mt-2 p-2 bg-white rounded border border-gray-200">
-                      <p className="text-xs text-gray-500 font-medium mb-1">
-                        Motivo:
+                    <div
+                      className={`mt-2 p-2 rounded border ${
+                        aprovacao.acao === "REPROVADO"
+                          ? "bg-red-100/60 border-red-300"
+                          : "bg-white border-gray-200"
+                      }`}
+                    >
+                      <p className="text-xs text-gray-600 font-medium mb-1">
+                        {aprovacao.acao === "REPROVADO"
+                          ? "Motivo da devolução:"
+                          : "Motivo:"}
                       </p>
-                      <p className="text-sm text-gray-700">{aprovacao.motivo}</p>
+                      <p className="text-sm text-gray-800">{aprovacao.motivo}</p>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="text-right">
+              <div className="text-left sm:text-right shrink-0">
                 <p className="text-xs text-gray-500">
                   {formatData(aprovacao.dataAcao)}
                 </p>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Users, UserPlus, Shield, Building2, Mail, Phone, User, Lock, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { SeletorOmBusca } from '@/components/operacoes/SeletorOmBusca';
 
 interface User {
   id: string;
@@ -188,12 +189,12 @@ export default function UsuariosPage() {
 
   return (
     <div>
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-military-900 mb-2">Gerenciamento de Usuários</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-military-900 mb-2">Gerenciamento de Usuários</h1>
           <p className="text-olive-700">Administrar usuários e permissões do sistema</p>
         </div>
-        <Button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2">
+        <Button onClick={() => setShowCreateModal(true)} className="flex items-center justify-center gap-2 w-full sm:w-auto">
           <UserPlus className="w-4 h-4" />
           Novo Usuário
         </Button>
@@ -222,7 +223,67 @@ export default function UsuariosPage() {
         />
       </div>
 
-      <div className="bg-white rounded-lg border border-olive-200 overflow-hidden">
+      {/* Mobile: card list */}
+      <div className="sm:hidden space-y-3">
+        {filteredUsers.length === 0 ? (
+          <div className="bg-white rounded-lg border border-olive-200 p-8 text-center text-olive-600">
+            Nenhum usuário encontrado
+          </div>
+        ) : (
+          filteredUsers.map((user) => (
+            <div key={user.id} className="bg-white rounded-lg border border-olive-200 p-4">
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-10 h-10 bg-military-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <User className="w-5 h-5 text-military-600" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-military-900 break-words">
+                    {user.postoGraduacao} {user.nomeGuerra || user.nomeCompleto}
+                  </div>
+                  <div className="text-sm text-olive-600 break-words">{user.email}</div>
+                  {user.telefone && (
+                    <div className="text-sm text-olive-500 flex items-center gap-1 mt-1">
+                      <Phone className="w-3 h-3" />
+                      {user.telefone}
+                    </div>
+                  )}
+                </div>
+                {user.isActive ? (
+                  <span className="shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    Ativo
+                  </span>
+                ) : (
+                  <span className="shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    Inativo
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Building2 className="w-4 h-4 text-olive-600 flex-shrink-0" />
+                  <div className="min-w-0">
+                    <div className="font-medium text-military-900">{user.om.sigla}</div>
+                    <div className="text-xs text-olive-600 flex items-center gap-1">
+                      <Shield className="w-3 h-3" />
+                      {ROLE_LABELS[user.role] || user.role}
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  variant={user.isActive ? 'danger' : 'success'}
+                  size="sm"
+                  onClick={() => handleToggleActive(user.id, user.isActive)}
+                >
+                  {user.isActive ? 'Desativar' : 'Ativar'}
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Desktop/tablet: table */}
+      <div className="hidden sm:block bg-white rounded-lg border border-olive-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-military-50 border-b border-olive-200">
@@ -323,9 +384,9 @@ export default function UsuariosPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-olive-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-military-900 flex items-center gap-2">
-                  <UserPlus className="w-6 h-6" />
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-xl sm:text-2xl font-bold text-military-900 flex items-center gap-2 break-words">
+                  <UserPlus className="w-6 h-6 flex-shrink-0" />
                   Novo Usuário
                 </h2>
                 <button
@@ -467,22 +528,11 @@ export default function UsuariosPage() {
                   <label className="block text-sm font-medium text-military-900 mb-1">
                     Organização Militar *
                   </label>
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-olive-500 pointer-events-none" />
-                    <select
-                      value={formData.omId}
-                      onChange={(e) => setFormData({ ...formData, omId: e.target.value })}
-                      className="w-full pl-10 pr-4 py-2 border border-olive-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 focus:border-transparent bg-white"
-                      required
-                    >
-                      <option value="">Selecione uma OM</option>
-                      {oms.map((om) => (
-                        <option key={om.id} value={om.id}>
-                          {om.sigla} - {om.nome}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <SeletorOmBusca
+                    oms={oms}
+                    value={formData.omId}
+                    onChange={(omId) => setFormData({ ...formData, omId })}
+                  />
                   {formErrors.omId && (
                     <p className="text-red-600 text-sm mt-1">{formErrors.omId}</p>
                   )}

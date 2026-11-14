@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
 import { getTodasOmsSubordinadas } from "@/lib/validators/om-participante";
 
 export async function GET(
@@ -7,6 +8,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+    }
+
     const { id: operacaoId } = await params;
     const { searchParams } = new URL(request.url);
     const omParticipanteId = searchParams.get("omParticipanteId");
@@ -36,14 +42,19 @@ export async function GET(
           include: {
             classe: true,
             tipo: true,
-            oms: { include: { om: true } },
+            oms: { include: { omDestino: true, omCompradora: true } },
             despesasNaturezas: { include: { natureza: true } },
           },
         },
+        despesasOperacionais: {
+          include: {
+            omDestino: true,
+            omCompradora: true,
+            naturezas: { include: { natureza: true } },
+          },
+        },
       },
-      orderBy: {
-        om: { sigla: "asc" },
-      },
+      orderBy: [{ om: { sigla: "asc" } }, { tipo: "asc" }],
     });
 
     // Busca a operação com suas relações

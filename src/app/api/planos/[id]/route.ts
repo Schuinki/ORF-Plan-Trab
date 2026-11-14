@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import {
+  getApprovalChain,
+  formatApprovalChainForDisplay,
+  canUserApprove,
+} from '@/lib/approval-chain';
 
 export async function GET(
   request: NextRequest,
@@ -49,6 +54,19 @@ export async function GET(
                 tipo: true,
               },
             },
+            omsParticipantes: {
+              include: {
+                om: {
+                  select: {
+                    id: true,
+                    nome: true,
+                    sigla: true,
+                    tipo: true,
+                    codUG: true,
+                  },
+                },
+              },
+            },
           },
         },
         responsavel: {
@@ -75,7 +93,15 @@ export async function GET(
             },
             oms: {
               include: {
-                om: {
+                omDestino: {
+                  select: {
+                    id: true,
+                    nome: true,
+                    sigla: true,
+                    codUG: true,
+                  },
+                },
+                omCompradora: {
                   select: {
                     id: true,
                     nome: true,
@@ -104,9 +130,58 @@ export async function GET(
             valorCalculado: true,
           },
         },
+        despesasOperacionais: incluirDespesas ? {
+          include: {
+            omDestino: {
+              select: {
+                id: true,
+                nome: true,
+                sigla: true,
+                codUG: true,
+              },
+            },
+            omCompradora: {
+              select: {
+                id: true,
+                nome: true,
+                sigla: true,
+                codUG: true,
+              },
+            },
+            naturezas: {
+              include: {
+                natureza: {
+                  select: {
+                    id: true,
+                    codigo: true,
+                    nome: true,
+                    gnd: true,
+                  },
+                },
+              },
+            },
+          },
+        } : false,
+        itensRacaoR2: incluirDespesas
+          ? {
+              include: {
+                om: { select: { id: true, nome: true, sigla: true, codUG: true } },
+              },
+              orderBy: [{ om: { sigla: "asc" } }, { createdAt: "asc" }],
+            }
+          : false,
+        itensMunicao: incluirDespesas
+          ? {
+              include: {
+                om: { select: { id: true, nome: true, sigla: true, codUG: true } },
+              },
+              orderBy: [{ om: { sigla: "asc" } }, { createdAt: "asc" }],
+            }
+          : false,
         _count: {
           select: {
             despesas: true,
+            despesasOperacionais: true,
             documentosReferencia: true,
             anotacoes: true,
           },
@@ -121,7 +196,26 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(plano);
+    // Cadeia de aprovação dinâmica (hierarquia de OMs) + permissão do usuário no nível atual
+    const chain = await getApprovalChain(plano.omId);
+    const cadeiaAprovacao = formatApprovalChainForDisplay(
+      chain,
+      plano.nivelAprovacaoAtual
+    );
+    const podeAprovarNivelAtual =
+      plano.status === 'EM_ANALISE' && plano.nivelAprovacaoAtual
+        ? await canUserApprove(
+            currentUser.userId,
+            plano.omId,
+            plano.nivelAprovacaoAtual
+          )
+        : false;
+
+    return NextResponse.json({
+      ...plano,
+      cadeiaAprovacao,
+      podeAprovarNivelAtual,
+    });
   } catch (error) {
     console.error('Get plano error:', error);
     return NextResponse.json(

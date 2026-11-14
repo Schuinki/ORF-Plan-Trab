@@ -8,10 +8,13 @@ import {
   Plus,
   CheckCircle2,
   Clock,
-  FileText,
+  PenLine,
 } from "lucide-react";
 import Link from "next/link";
-import { gerarPdfPlanoTrabalho } from "@/lib/pdf/gerarPdfPlanoTrabalho";
+import { gerarPdfPlanoTrabalho, OpcoesPdf } from "@/lib/pdf/gerarPdfPlanoTrabalho";
+import { gerarPdfPlanoTrabalhoOperacional } from "@/lib/pdf/gerarPdfPlanoTrabalhoOperacional";
+import { ModalAssinarGovBr } from "@/components/planos/ModalAssinarGovBr";
+import { getStatusPlanoLabel } from "@/lib/statusPlano";
 
 interface OMSubordinada {
   id: string;
@@ -26,6 +29,7 @@ interface PlanoOM {
   omId: string;
   status: string;
   id: string;
+  tipo: string;
 }
 
 interface ModalOmsSubordinadasProps {
@@ -38,7 +42,6 @@ interface ModalOmsSubordinadasProps {
   };
   operacaoId: string;
   planosTrabalho: PlanoOM[];
-  userOmId?: string;
 }
 
 export function ModalOmsSubordinadas({
@@ -47,12 +50,19 @@ export function ModalOmsSubordinadas({
   omParticipante,
   operacaoId,
   planosTrabalho,
-  userOmId,
 }: ModalOmsSubordinadasProps) {
   const [loading, setLoading] = useState(true);
   const [subordinadas, setSubordinadas] = useState<OMSubordinada[]>([]);
   const [error, setError] = useState("");
   const [generatingPdf, setGeneratingPdf] = useState(false);
+
+  // Estado do modal de assinatura (nome/posto/função)
+  const [showAssinarModal, setShowAssinarModal] = useState(false);
+  const [nomeAssinante, setNomeAssinante] = useState("");
+  const [postoAssinante, setPostoAssinante] = useState("");
+  const [funcaoAssinante, setFuncaoAssinante] = useState("");
+  const [erroAssinatura, setErroAssinatura] = useState("");
+  const [isAssinando, setIsAssinando] = useState(false);
 
   useEffect(() => {
     if (isOpen && omParticipante?.id) {
@@ -83,8 +93,10 @@ export function ModalOmsSubordinadas({
     }
   }
 
-  function getPlano(omId: string): PlanoOM | null {
-    return planosTrabalho.find((p) => p.omId === omId) || null;
+  function getPlano(omId: string, tipo: string = "LOGISTICO"): PlanoOM | null {
+    return (
+      planosTrabalho.find((p) => p.omId === omId && p.tipo === tipo) || null
+    );
   }
 
   function getStatusColor(status: string) {
@@ -103,7 +115,7 @@ export function ModalOmsSubordinadas({
   );
   const temPlanos = planosNasSubordinadas.length > 0;
 
-  async function handleGerarPdf() {
+  async function handleGerarPdf(opcoesAssinatura?: OpcoesPdf) {
     if (!temPlanos) return;
 
     setGeneratingPdf(true);
@@ -123,12 +135,55 @@ export function ModalOmsSubordinadas({
         return;
       }
 
-      await gerarPdfPlanoTrabalho(planos, operacao);
+      const planosLogisticos = planos.filter(
+        (p: { tipo: string }) => p.tipo === "LOGISTICO"
+      );
+      const planosOperacionais = planos.filter(
+        (p: { tipo: string }) =>
+          p.tipo === "OPERACIONAL_GND3" || p.tipo === "OPERACIONAL_GND4"
+      );
+
+      if (planosLogisticos.length > 0) {
+        await gerarPdfPlanoTrabalho(
+          planosLogisticos,
+          operacao,
+          undefined,
+          opcoesAssinatura
+        );
+      }
+      if (planosOperacionais.length > 0) {
+        await gerarPdfPlanoTrabalhoOperacional(
+          planosOperacionais,
+          operacao,
+          undefined,
+          opcoesAssinatura
+        );
+      }
     } catch (err) {
       console.error("Erro ao gerar PDF:", err);
       alert("Erro ao gerar PDF. Tente novamente.");
     } finally {
       setGeneratingPdf(false);
+    }
+  }
+
+  async function handleAssinarGovBr() {
+    if (!nomeAssinante.trim()) {
+      setErroAssinatura("Informe o nome da autoridade que vai assinar.");
+      return;
+    }
+    setIsAssinando(true);
+    setErroAssinatura("");
+    try {
+      await handleGerarPdf({
+        nomeAssinante: nomeAssinante.trim(),
+        postoAssinante: postoAssinante.trim() || undefined,
+        funcaoAssinante: funcaoAssinante.trim() || undefined,
+      });
+      window.open("https://assinador.iti.br", "_blank", "noopener,noreferrer");
+      setShowAssinarModal(false);
+    } finally {
+      setIsAssinando(false);
     }
   }
 
@@ -181,10 +236,9 @@ export function ModalOmsSubordinadas({
               <div className="space-y-3">
                 {subordinadas.map((om) => {
                   const plano = getPlano(om.id);
-                  const canCreatePlano =
-                    om.isFolha &&
-                    (userOmId === om.id || userOmId === omParticipante.id) &&
-                    !plano;
+                  // Qualquer usuário autenticado pode criar plano para
+                  // qualquer OM subordinada folha (sem bloqueio por OM própria).
+                  const canCreatePlano = om.isFolha && !plano;
 
                   return (
                     <div
@@ -227,7 +281,7 @@ export function ModalOmsSubordinadas({
                                   <Clock className="w-4 h-4" />
                                 )}
                                 <span className="text-sm font-medium">
-                                  {plano.status.replace("_", " ")}
+                                  {getStatusPlanoLabel(plano.status)}
                                 </span>
                               </div>
                             </Link>
@@ -262,11 +316,14 @@ export function ModalOmsSubordinadas({
           </div>
 
           {/* Footer */}
-          <div className="flex justify-between p-4 border-t bg-gray-50">
+          <div className="flex flex-col sm:flex-row sm:justify-between gap-2 p-4 border-t bg-gray-50">
             <div>
               {temPlanos && !loading && (
                 <button
-                  onClick={handleGerarPdf}
+                  onClick={() => {
+                    setErroAssinatura("");
+                    setShowAssinarModal(true);
+                  }}
                   disabled={generatingPdf}
                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-military-600 rounded-lg hover:bg-military-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -277,8 +334,8 @@ export function ModalOmsSubordinadas({
                     </>
                   ) : (
                     <>
-                      <FileText className="w-4 h-4" />
-                      Gerar PDF Consolidado
+                      <PenLine className="w-4 h-4" />
+                      Assinar no gov.br
                     </>
                   )}
                 </button>
@@ -293,6 +350,21 @@ export function ModalOmsSubordinadas({
           </div>
         </div>
       </div>
+
+      {/* Modal de Assinatura (nome/posto/função) */}
+      <ModalAssinarGovBr
+        isOpen={showAssinarModal}
+        onClose={() => setShowAssinarModal(false)}
+        onConfirm={handleAssinarGovBr}
+        isSubmitting={isAssinando}
+        erro={erroAssinatura}
+        nomeAssinante={nomeAssinante}
+        setNomeAssinante={setNomeAssinante}
+        postoAssinante={postoAssinante}
+        setPostoAssinante={setPostoAssinante}
+        funcaoAssinante={funcaoAssinante}
+        setFuncaoAssinante={setFuncaoAssinante}
+      />
     </div>
   );
 }

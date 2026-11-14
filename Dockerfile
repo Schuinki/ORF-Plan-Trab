@@ -3,7 +3,8 @@
 # ============================================
 
 # Estágio 1: Dependências
-FROM node:18-alpine AS deps
+# node:20+ é exigido pelo pdf-parse (engine >=20.16.0)
+FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
@@ -16,7 +17,7 @@ RUN yarn install --frozen-lockfile
 
 # ============================================
 # Estágio 2: Build
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copiar dependências do estágio anterior
@@ -32,7 +33,7 @@ RUN yarn build
 
 # ============================================
 # Estágio 3: Runner (Produção)
-FROM node:18-alpine AS runner
+FROM node:20-alpine AS runner
 WORKDIR /app
 
 # Instalar openssl para Prisma
@@ -53,10 +54,9 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copiar Prisma (incluindo CLI para migrations)
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+# Copiar node_modules completo (necessário para a CLI do Prisma rodar migrations:
+# o Prisma 6 usa pacotes auxiliares como "effect" que não ficam em .prisma/@prisma/prisma)
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 
 # Copiar script de entrada

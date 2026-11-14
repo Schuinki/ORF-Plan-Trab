@@ -2,20 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { X, Plus, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import { RateioOMs } from "./RateioOMs";
-import { RateioNaturezas } from "./RateioNaturezas";
-import {
-  FormularioClasseI,
-  FormularioClasseII,
-  FormularioClasseIII,
-  FormularioClasseIV,
-  FormularioClasseV,
-  FormularioClasseVI,
-  FormularioClasseVII,
-  FormularioClasseVIII,
-  FormularioClasseIX,
-  FormularioClasseX,
-} from "./formularios";
+import { DespesaClasseFormulario } from "./DespesaClasseFormulario";
+import { getClasseNome } from "@/lib/classes";
 import { Tipo } from "@prisma/client";
 import type {
   ClasseSelect,
@@ -40,13 +31,16 @@ interface DespesaToEdit {
   valorCalculado: number;
   valorCombustivel: number | null;
   oms: Array<{
-    omId: string;
+    omDestinoId: string;
+    omCompradoraId: string;
     percentual: number;
   }>;
   despesasNaturezas: Array<{
     naturezaId: string;
     percentual: number;
   }>;
+  importado?: boolean;
+  valorImportadoOriginal?: number | null;
 }
 
 interface ModalCriarDespesaProps {
@@ -54,8 +48,9 @@ interface ModalCriarDespesaProps {
   onClose: () => void;
   planoId: string;
   oms: OMSelect[];
+  loadingOms?: boolean;
   operacao: OperacaoWithEfetivo;
-  onSuccess: () => void;
+  onSuccess: (omsAdicionadas?: { id: string; sigla: string }[]) => void;
   despesaToEdit?: DespesaToEdit | null;
   userOm: UserOM | null;
   planoOm: UserOM | null;
@@ -66,6 +61,7 @@ export function ModalCriarDespesa({
   onClose,
   planoId,
   oms,
+  loadingOms,
   operacao,
   onSuccess,
   despesaToEdit = null,
@@ -114,7 +110,8 @@ export function ModalCriarDespesa({
         setValorCombustivel(despesaToEdit.valorCombustivel || undefined);
         setRateioOMs(
           despesaToEdit.oms.map((om) => ({
-            omId: om.omId,
+            omDestinoId: om.omDestinoId,
+            omCompradoraId: om.omCompradoraId,
             percentual: om.percentual,
           }))
         );
@@ -152,45 +149,6 @@ export function ModalCriarDespesa({
       }
     }
   }, [despesaToEdit, tipos]);
-
-  // Auto-seleciona um tipo dummy quando não há tipos disponíveis
-  useEffect(() => {
-    if (classeId && !loadingTipos && tipos.length === 0) {
-      // Cria um tipo dummy para permitir o uso do formulário
-      setTipoSelecionado({
-        id: "NO_TYPE",
-        nome: "Sem tipo específico",
-        classeId,
-        isCombustivel: false,
-        isCriavelUsuario: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-    }
-  }, [classeId, loadingTipos, tipos.length]);
-
-  // Auto-set natureza to 100% if only one is permitted
-  useEffect(() => {
-    if (
-      classeSelecionada &&
-      naturezas.length > 0 &&
-      rateioNaturezas.length === 0
-    ) {
-      const naturezasPermitidas = classeSelecionada.naturezasPermitidas;
-      const naturezasFiltradas = naturezas.filter((nat) =>
-        naturezasPermitidas.includes(nat.codigo)
-      );
-
-      if (naturezasFiltradas.length === 1) {
-        setRateioNaturezas([
-          {
-            naturezaId: naturezasFiltradas[0].id,
-            percentual: 100,
-          },
-        ]);
-      }
-    }
-  }, [classeSelecionada, naturezas, rateioNaturezas.length]);
 
   const carregarClasses = async () => {
     try {
@@ -290,6 +248,8 @@ export function ModalCriarDespesa({
       newErrors.tipoId = "Selecione um tipo";
     if (rateioOMs.length === 0)
       newErrors.rateioOMs = "Adicione ao menos uma OM";
+    else if (rateioOMs.some((om) => !om.omDestinoId || !om.omCompradoraId))
+      newErrors.rateioOMs = "Selecione a OM em todas as linhas do rateio";
 
     const somaPercentuais = rateioOMs.reduce(
       (sum, om) => sum + Number(om.percentual),
@@ -342,8 +302,7 @@ export function ModalCriarDespesa({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           classeId,
-          tipoId:
-            tipoSelecionado?.id === "NO_TYPE" ? null : tipoSelecionado?.id,
+          tipoId: tipoSelecionado?.id ?? null,
           descricao: descricao.trim(),
           parametros,
           oms: rateioOMs,
@@ -354,7 +313,8 @@ export function ModalCriarDespesa({
       });
 
       if (response.ok) {
-        onSuccess();
+        const data = await response.json();
+        onSuccess(data.omsAdicionadas);
         onClose();
         resetForm();
       } else {
@@ -374,88 +334,21 @@ export function ModalCriarDespesa({
     }
   };
 
-  const renderFormularioClasse = () => {
-    if (!classeSelecionada) return null;
-    // Permite renderização sem tipo quando não há tipos disponíveis
-    if (!tipoSelecionado && tipos.length > 0) return null;
-
-    const handleParametrosChange = (params: HandleParametrosChange) => {
-      setParametros(params.params);
-      setValorTotal(params.valor);
-      setValorCombustivel(params.valorCombustivel);
-      setDescricao(params.descricao || "");
-    };
-
-    // Props comuns para todos os formulários
-    const commonProps = {
-      onChange: handleParametrosChange,
-      operacao,
-      userOm,
-      planoOm,
-      naturezas,
-      rateioNaturezas,
-    };
-
-    switch (classeSelecionada.nome) {
-      case "CLASSE_I":
-        if (!tipoSelecionado) return null;
-        return (
-          <FormularioClasseI
-            value={parametros as any}
-            tipo={tipoSelecionado}
-            {...commonProps}
-          />
-        );
-      case "CLASSE_II":
-        return (
-          <FormularioClasseII value={parametros as any} {...commonProps} />
-        );
-      case "CLASSE_III":
-        if (!tipoSelecionado) return null;
-        return (
-          <FormularioClasseIII
-            tipoSelecionado={tipoSelecionado}
-            value={parametros as any}
-            {...commonProps}
-          />
-        );
-      case "CLASSE_IV":
-        return (
-          <FormularioClasseIV value={parametros as any} {...commonProps} />
-        );
-      case "CLASSE_V":
-        return <FormularioClasseV value={parametros as any} {...commonProps} />;
-      case "CLASSE_VI":
-        return (
-          <FormularioClasseVI value={parametros as any} {...commonProps} />
-        );
-      case "CLASSE_VII":
-        return (
-          <FormularioClasseVII value={parametros as any} {...commonProps} />
-        );
-      case "CLASSE_VIII":
-        return (
-          <FormularioClasseVIII value={parametros as any} {...commonProps} />
-        );
-      case "CLASSE_IX":
-        return (
-          <FormularioClasseIX value={parametros as any} {...commonProps} />
-        );
-      case "CLASSE_X":
-        return <FormularioClasseX value={parametros as any} {...commonProps} />;
-      default:
-        return null;
-    }
+  const handleParametrosChange = (params: HandleParametrosChange) => {
+    setParametros(params.params);
+    setValorTotal(params.valor);
+    setValorCombustivel(params.valorCombustivel);
+    setDescricao(params.descricao || "");
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 overflow-y-auto py-8">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 my-8">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 overflow-y-auto py-4 sm:py-8">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 my-0 sm:my-8">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-xl font-bold text-gray-900">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900">
             {despesaToEdit
               ? "Editar Despesa Logística"
               : "Nova Despesa Logística"}
@@ -472,12 +365,66 @@ export function ModalCriarDespesa({
         {/* Body */}
         <form
           onSubmit={handleSubmit}
-          className="px-6 py-4 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto"
+          className="px-4 sm:px-6 py-4 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto"
         >
+          {/* Comparação com o valor importado — fixa durante toda a reclassificação */}
+          {despesaToEdit?.importado && (
+            <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
+              <p className="text-xs font-semibold text-amber-800 mb-2">
+                Despesa fruto de importação — compare com o que o sistema
+                calcula ao reclassificar
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-amber-700 mb-1">
+                    Descrição original importada
+                  </p>
+                  <p className="text-sm text-gray-900">
+                    {despesaToEdit.descricao}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-amber-700 mb-1">
+                    Valor importado (original)
+                  </p>
+                  <p className="text-lg font-bold text-amber-800">
+                    {new Intl.NumberFormat("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    }).format(Number(despesaToEdit.valorImportadoOriginal || 0))}
+                  </p>
+                </div>
+              </div>
+              {classeSelecionada && (
+                <p className="text-xs text-amber-700 mt-3">
+                  O sistema calcularia:{" "}
+                  <span className="font-semibold">
+                    {new Intl.NumberFormat("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    }).format(valorTotal)}
+                  </span>
+                  {Math.abs(
+                    valorTotal - Number(despesaToEdit.valorImportadoOriginal || 0)
+                  ) > 0.01
+                    ? " — diferente do valor importado."
+                    : " — igual ao valor importado."}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Classe */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-2">
               Classe de Despesa <span className="text-red-500">*</span>
+              <HelpTooltip>
+                As Classes (I a X) são as categorias de material usadas pelo
+                Exército para organizar despesas logísticas: alimentação,
+                combustível, munição, material de saúde, manutenção de
+                viaturas, etc. Escolha a que mais se parece com o que você
+                está comprando ou contratando.
+              </HelpTooltip>
             </label>
             {loadingClasses ? (
               <div className="flex items-center justify-center py-4">
@@ -492,7 +439,7 @@ export function ModalCriarDespesa({
                 <option value="">Selecione uma classe</option>
                 {classes.map((classe) => (
                   <option key={classe.id} value={classe.id}>
-                    {classe.nome} - {classe.descricao}
+                    {getClasseNome(classe.nome)} - {classe.descricao}
                   </option>
                 ))}
               </select>
@@ -548,27 +495,27 @@ export function ModalCriarDespesa({
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-600 focus:border-transparent text-sm"
                   />
                   <div className="flex gap-2">
-                    <button
+                    <Button
                       type="button"
+                      size="sm"
+                      variant="primary"
                       onClick={handleCriarTipo}
-                      disabled={!novoTipoNome.trim() || loadingCriarTipo}
-                      className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                      disabled={!novoTipoNome.trim()}
+                      isLoading={loadingCriarTipo}
                     >
-                      {loadingCriarTipo && (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      )}
                       Criar
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
+                      size="sm"
+                      variant="outline"
                       onClick={() => {
                         setShowCriarTipo(false);
                         setNovoTipoNome("");
                       }}
-                      className="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-md hover:bg-gray-300"
                     >
                       Cancelar
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -579,28 +526,23 @@ export function ModalCriarDespesa({
           )}
 
           {classeSelecionada && (tipoSelecionado || tipos.length === 0) && (
-            <div className="border-t pt-4">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                Parâmetros de Cálculo - {classeSelecionada.nome}
-              </h3>
-              {renderFormularioClasse()}
-              {errors.parametros && (
-                <p className="text-sm text-red-600 mt-2">{errors.parametros}</p>
-              )}
-            </div>
-          )}
-
-          {/* Rateio Naturezas */}
-          {classeSelecionada && (tipoSelecionado || tipos.length === 0) && (
-            <div className="border-t pt-4">
-              <RateioNaturezas
-                naturezas={naturezas}
-                naturezasPermitidas={classeSelecionada.naturezasPermitidas}
-                value={rateioNaturezas}
-                onChange={setRateioNaturezas}
-                error={errors.rateioNaturezas}
-              />
-            </div>
+            <DespesaClasseFormulario
+              classeId={classeId}
+              classeNome={classeSelecionada.nome}
+              naturezasPermitidas={classeSelecionada.naturezasPermitidas}
+              tipos={tipos}
+              tipoId={tipoSelecionado?.id ?? null}
+              parametros={parametros}
+              rateioNaturezas={rateioNaturezas}
+              operacao={operacao}
+              userOm={userOm}
+              planoOm={planoOm}
+              naturezas={naturezas}
+              onParametrosChange={handleParametrosChange}
+              onRateioNaturezasChange={setRateioNaturezas}
+              parametrosError={errors.parametros}
+              rateioNaturezasError={errors.rateioNaturezas}
+            />
           )}
 
           {/* Rateio OMs */}
@@ -608,6 +550,7 @@ export function ModalCriarDespesa({
             <div className="border-t pt-4">
               <RateioOMs
                 oms={oms}
+                loadingOms={loadingOms}
                 value={rateioOMs}
                 onChange={setRateioOMs}
                 error={errors.rateioOMs}
@@ -617,23 +560,13 @@ export function ModalCriarDespesa({
         </form>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-gray-50">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={loading}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-4 border-t bg-gray-50">
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
             Cancelar
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
-          >
-            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+          </Button>
+          <Button variant="primary" onClick={handleSubmit} isLoading={loading}>
             {despesaToEdit ? "Salvar Alterações" : "Criar Despesa"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

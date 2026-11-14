@@ -151,40 +151,54 @@ function parsePreco(precoStr: string): number {
   return parseFloat(precoStr.replace(",", "."));
 }
 
+const CACHE_TTL_MS = 30_000;
+let precosCache: { valor: Promise<PrecosCombustivelAPI | null>; expiraEm: number } | null = null;
+
 /**
- * Busca preços de combustível da API
+ * Busca preços de combustível da API, com um cache curto em memória (30s)
+ * para evitar N chamadas redundantes quando várias despesas de Classe III
+ * são preenchidas ao mesmo tempo (ex.: várias linhas da Entrada Rápida).
  */
 export async function fetchPrecosCombustivel(): Promise<PrecosCombustivelAPI | null> {
-  try {
-    const response = await fetch(API_COMBUSTIVEL_URL, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      console.error("Erro ao buscar preços de combustível:", response.status);
-      return null;
-    }
-
-    const data: APIResponse = await response.json();
-
-    if (data.error) {
-      console.error("API retornou erro:", data.message);
-      return null;
-    }
-
-    return {
-      gasolina: data.precos.gasolina,
-      diesel: data.precos.diesel,
-      dataColeta: data.data_coleta,
-    };
-  } catch (error) {
-    console.error("Erro ao buscar preços de combustível:", error);
-    return null;
+  if (precosCache && precosCache.expiraEm > Date.now()) {
+    return precosCache.valor;
   }
+
+  const valor = (async () => {
+    try {
+      const response = await fetch(API_COMBUSTIVEL_URL, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        console.error("Erro ao buscar preços de combustível:", response.status);
+        return null;
+      }
+
+      const data: APIResponse = await response.json();
+
+      if (data.error) {
+        console.error("API retornou erro:", data.message);
+        return null;
+      }
+
+      return {
+        gasolina: data.precos.gasolina,
+        diesel: data.precos.diesel,
+        dataColeta: data.data_coleta,
+      };
+    } catch (error) {
+      console.error("Erro ao buscar preços de combustível:", error);
+      return null;
+    }
+  })();
+
+  precosCache = { valor, expiraEm: Date.now() + CACHE_TTL_MS };
+  return valor;
 }
 
 /**

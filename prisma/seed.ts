@@ -415,16 +415,46 @@ async function main() {
 
   const naturezas = [
     {
+      codigo: "33.90.15",
+      nome: "Diárias",
+      descricao:
+        "Despesas com indenização de pousada, alimentação e locomoção urbana de militares em deslocamento",
+      gnd: "GND 3",
+    },
+    {
       codigo: "33.90.30",
       nome: "Material de Consumo",
       descricao:
         "Despesas com aquisição de materiais de consumo destinados à manutenção de bens imóveis e/ou serviços",
+      gnd: "GND 3",
+    },
+    {
+      codigo: "33.90.33",
+      nome: "Passagens e Despesas com Locomoção",
+      descricao:
+        "Despesas com passagens, fretamento, locação de veículos e demais serviços de transporte",
+      gnd: "GND 3",
     },
     {
       codigo: "33.90.39",
       nome: "Outros Serviços de Terceiros - Pessoa Jurídica",
       descricao:
         "Despesas com aquisição de serviços eventuais de pessoas jurídicas",
+      gnd: "GND 3",
+    },
+    {
+      codigo: "33.90.40",
+      nome: "Serviços de Tecnologia da Informação e Comunicação",
+      descricao:
+        "Despesas com serviços de TI, licenças de software e telecomunicações",
+      gnd: "GND 3",
+    },
+    {
+      codigo: "44.90.52",
+      nome: "Equipamentos e Material Permanente",
+      descricao:
+        "Despesas com aquisição de equipamentos e material permanente",
+      gnd: "GND 4",
     },
   ];
 

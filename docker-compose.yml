@@ -38,12 +38,16 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      DATABASE_URL: ${DATABASE_URL}
+      # Conecta no serviço "postgres" da rede interna do compose
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}?schema=public
       JWT_SECRET: ${JWT_SECRET}
       NEXT_PUBLIC_APP_URL: ${APP_URL}
       APP_URL: ${APP_URL}
+      # Em intranet via HTTP, o cookie de login não pode ser "secure"
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       PORT: ${APP_PORT}
     ports:
+      # Binda em todas as interfaces: acessível pelos demais computadores da LAN
       - "${APP_PORT:-3000}:3000"
     networks:
       - sisptrab-network

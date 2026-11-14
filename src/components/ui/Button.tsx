@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'danger' | 'success';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
 }
@@ -15,11 +15,17 @@ export function Button({
   className = '',
   ...props
 }: ButtonProps) {
-  const baseClasses = 'font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+  const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg border border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
+  // Nunca sobrescreva a cor de fundo via `className` em um caller — adicione
+  // um variant novo aqui. Misturar bg-* externo com variantClasses gera
+  // conflito de especificidade do Tailwind (a ordem de qual "ganha" não é
+  // previsível) e foi a causa da inconsistência visual dos botões.
   const variantClasses = {
     primary: 'bg-military-600 hover:bg-military-700 text-white focus:ring-military-500',
     secondary: 'bg-olive-200 hover:bg-olive-300 text-olive-900 focus:ring-olive-500',
+    outline: 'bg-white border-olive-300 text-olive-800 hover:bg-olive-50 focus:ring-olive-400',
+    ghost: 'bg-transparent text-olive-700 hover:bg-olive-100 focus:ring-olive-400',
     danger: 'bg-red-700 hover:bg-red-800 text-white focus:ring-red-600',
     success: 'bg-military-500 hover:bg-military-600 text-white focus:ring-military-400',
   };

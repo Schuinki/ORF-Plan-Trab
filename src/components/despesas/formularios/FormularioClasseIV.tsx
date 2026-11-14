@@ -5,16 +5,11 @@ import { PreviewCalculo } from "../PreviewCalculo";
 import { Plus, X } from "lucide-react";
 import { HandleParametrosChange } from "../ModalCriarDespesa";
 import type { OperacaoWithEfetivo, UserOM, NaturezaSelect, RateioNatureza } from "@/types/despesas";
-
-interface MaterialConstrucao {
-  descricao: string;
-  quantidade: number;
-  valorUnitario: number;
-}
-
-interface ParametrosClasseIV {
-  materiais: MaterialConstrucao[];
-}
+import {
+  calcularClasseIV,
+  type MaterialConstrucao,
+  type ParametrosClasseIV,
+} from "@/lib/calculos/classeIV";
 
 interface FormularioClasseIVProps {
   value: ParametrosClasseIV | null;
@@ -59,77 +54,27 @@ export function FormularioClasseIV({
   }, [params]);
 
   const calcular = () => {
-    const { materiais } = params;
-
-    if (materiais.length === 0) {
+    try {
+      const resultado = calcularClasseIV(
+        params,
+        planoOm?.sigla,
+        operacao.nome,
+        getNaturezasCodigos()
+      );
+      setValorTotal(resultado.valorTotal);
+      setDetalhes({
+        numeroItens: params.materiais.filter(
+          (m) => m.descricao && m.quantidade > 0 && m.valorUnitario > 0
+        ).length,
+      });
+      setCarimbo(resultado.carimbo);
+      setCarimboEditadoManualmente(false);
+      onChange({ params, valor: resultado.valorTotal, descricao: resultado.carimbo });
+    } catch {
       setValorTotal(null);
       setDetalhes(null);
       setCarimbo("");
-      return;
     }
-
-    const materiaisValidos = materiais.filter(
-      (m) => m.descricao && m.quantidade > 0 && m.valorUnitario > 0
-    );
-
-    if (materiaisValidos.length === 0) {
-      setValorTotal(null);
-      setDetalhes(null);
-      setCarimbo("");
-      return;
-    }
-
-    const itensDetalhados = materiaisValidos.map((m) => ({
-      descricao: m.descricao,
-      quantidade: m.quantidade,
-      valorUnitario: m.valorUnitario,
-      subtotal: Number((m.quantidade * m.valorUnitario).toFixed(2)),
-    }));
-
-    const total = itensDetalhados.reduce((sum, item) => sum + item.subtotal, 0);
-    const totalFinal = Number(total.toFixed(2));
-    const totalFormatado = `R$ ${totalFinal.toLocaleString("pt-BR", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-
-    // Gerar memória de cálculo como string
-    const memoriaCalculo = itensDetalhados
-      .map(
-        (item) =>
-          `→ ${item.descricao}: ${
-            item.quantidade
-          } x R$ ${item.valorUnitario.toFixed(2)} = R$ ${item.subtotal.toFixed(
-            2
-          )}`
-      )
-      .join("\n");
-
-    const unidadeTexto = planoOm?.sigla || "OM não identificada";
-    const operacaoTexto = operacao.nome || "operação";
-    const textoPadrao = `Aquisição de materiais de construção e engenharia para emprego no contexto da ${operacaoTexto}.`;
-
-    // Usar naturezas selecionadas ou fallback
-    const naturezasCodigos = getNaturezasCodigos();
-    const naturezasTexto = naturezasCodigos.length > 0
-      ? naturezasCodigos.join(" e ")
-      : "33.90.30";
-
-    const carimboPadrao = `${naturezasTexto} – Destinado ao ${unidadeTexto}. ${textoPadrao}
-Memória de Cálculo:
-
-${memoriaCalculo}
-
-Total: ${totalFormatado}`;
-
-    setValorTotal(totalFinal);
-    setDetalhes({
-      numeroItens: itensDetalhados.length,
-      itens: itensDetalhados,
-    });
-    setCarimbo(carimboPadrao);
-    setCarimboEditadoManualmente(false);
-    onChange({ params, valor: totalFinal, descricao: carimboPadrao });
   };
 
   const handleCarimboChange = (novoCarimbo: string) => {
@@ -215,7 +160,7 @@ Total: ${totalFormatado}`;
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     Quantidade

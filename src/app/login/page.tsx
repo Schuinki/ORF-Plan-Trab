@@ -41,8 +41,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-military-50 to-olive-100">
-      <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md border border-olive-200">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-military-50 to-olive-100 p-4">
+      <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-md border border-olive-200">
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-military-600 rounded-lg mx-auto mb-4 flex items-center justify-center">
             <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

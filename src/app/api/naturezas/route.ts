@@ -16,6 +16,7 @@ export async function GET() {
         codigo: true,
         nome: true,
         descricao: true,
+        gnd: true,
       },
       orderBy: {
         codigo: 'asc',

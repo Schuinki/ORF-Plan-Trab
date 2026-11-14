@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { canCreateOperacao, canViewAllPlanos } from '@/lib/permissions';
-import { validarOmsParticipantes } from '@/lib/validators/om-participante';
 import { z } from 'zod';
-import { StatusPlano, Prioridade, TipoEvento } from '@prisma/client';
+import { StatusPlano, TipoEvento } from '@prisma/client';
 
 const omParticipanteSchema = z.object({
   omId: z.string().min(1, 'ID da OM é obrigatório'),
@@ -17,7 +16,6 @@ const createOperacaoSchema = z.object({
   efetivoExt: z.number().int().positive('Efetivo deve ser positivo').optional(),
   dataInicio: z.string().datetime(),
   dataFinal: z.string().datetime(),
-  prioridade: z.nativeEnum(Prioridade).optional(),
   finalidade: z.string().optional(),
   motivacao: z.string().optional(),
   consequenciaNaoAtendimento: z.string().optional(),
@@ -151,24 +149,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Validar que OMs participantes são filhas diretas de CMA
+    // Validar que as OMs participantes existem
     if (data.omsParticipantes && data.omsParticipantes.length > 0) {
       const omIds = data.omsParticipantes.map((om) => om.omId);
-      const validacao = await validarOmsParticipantes(omIds);
+      const omsEncontradas = await prisma.organizacaoMilitar.findMany({
+        where: { id: { in: omIds } },
+        select: { id: true },
+      });
+      const idsEncontrados = new Set(omsEncontradas.map((om) => om.id));
+      const idsInvalidos = omIds.filter((omId) => !idsEncontrados.has(omId));
 
-      if (!validacao.valid) {
-        // Buscar nomes das OMs inválidas para mensagem mais clara
-        const omsInvalidas = await prisma.organizacaoMilitar.findMany({
-          where: { id: { in: validacao.invalidOms } },
-          select: { sigla: true, nome: true },
-        });
-
+      if (idsInvalidos.length > 0) {
         return NextResponse.json(
           {
-            error: 'Apenas OMs filhas diretas de CMA podem ser participantes de operações',
-            details: {
-              omsInvalidas: omsInvalidas.map((om) => `${om.sigla} - ${om.nome}`),
-            },
+            error: 'Uma ou mais OMs participantes não foram encontradas',
+            details: { idsInvalidos },
           },
           { status: 400 }
         );
@@ -184,7 +179,6 @@ export async function POST(request: NextRequest) {
         dataInicio,
         dataFinal,
         diasTotais,
-        prioridade: data.prioridade || Prioridade.MEDIA,
         status: StatusPlano.RASCUNHO,
         finalidade: data.finalidade,
         motivacao: data.motivacao,

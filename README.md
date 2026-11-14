@@ -344,7 +344,6 @@ O sistema utiliza PostgreSQL com Prisma ORM. Principais entidades:
 - Criar operação com nome, efetivo, período
 - Campos descritivos: finalidade, motivação, consequências
 - Vincular à OM responsável
-- Controle de prioridade
 
 ### 2. Planos de Trabalho
 

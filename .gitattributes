@@ -1,0 +1,3 @@
+# Scripts executados dentro de containers Linux precisam de LF, mesmo em
+# checkout no Windows — CRLF quebra "exec ./docker-entrypoint.sh".
+*.sh text eol=lf

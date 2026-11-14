@@ -60,7 +60,15 @@ export async function GET(
         },
         oms: {
           include: {
-            om: {
+            omDestino: {
+              select: {
+                id: true,
+                nome: true,
+                sigla: true,
+                codUG: true,
+              },
+            },
+            omCompradora: {
               select: {
                 id: true,
                 nome: true,
