@@ -11,6 +11,9 @@
     5. Baixa a imagem da aplicacao (pronta, publicada no GitHub Container
        Registry) e o Postgres, e sobe os containers.
     6. Espera a aplicacao responder e abre o navegador.
+    7. Cria um atalho "SisPTrab" na Area de Trabalho que, nas proximas vezes,
+       sobe os containers (se precisar) e abre o navegador - sem precisar
+       rodar este instalador pesado de novo.
 
   Nao precisa clonar o repositorio nem ter Node/Docker build tools - so o
   Windows com suporte a virtualizacao (qualquer PC moderno tem).
@@ -287,6 +290,72 @@ Write-Host "Login padrao: admin@eb.mil.br / admin123 (troque a senha apos o prim
 Write-Host ""
 Write-Host "Libere a porta $AppPort no firewall (entrada TCP) para os demais"
 Write-Host "computadores da rede conseguirem acessar pelo IP acima."
+Write-Host ""
+
+# ------------------------------------------------------------------
+# 8) Atalho na Area de Trabalho para abrir o sistema depois, sem
+#    precisar rodar o instalador pesado de novo.
+# ------------------------------------------------------------------
+Write-Titulo "Criando atalho na Area de Trabalho"
+
+$LaunchScript = Join-Path $AppDir "abrir-sisptrab.ps1"
+@"
+`$ErrorActionPreference = "Stop"
+`$AppDir = "$AppDir"
+`$EnvFile = "$EnvFile"
+`$ComposeFile = "$ComposeFile"
+`$DockerDesktopExe = "$DockerDesktopExe"
+`$UrlLocal = "$UrlLocal"
+
+`$DockerPronto = `$false
+try { docker info *> `$null; `$DockerPronto = `$true } catch { }
+
+if (-not `$DockerPronto) {
+    if (Test-Path `$DockerDesktopExe) { Start-Process `$DockerDesktopExe }
+    for (`$i = 0; `$i -lt 90; `$i++) {
+        try { docker info *> `$null; `$DockerPronto = `$true; break } catch { Start-Sleep -Seconds 2 }
+    }
+}
+
+if (`$DockerPronto) {
+    Set-Location `$AppDir
+    docker compose --env-file `$EnvFile -f `$ComposeFile up -d *> `$null
+    for (`$i = 0; `$i -lt 60; `$i++) {
+        try {
+            `$resp = Invoke-WebRequest -Uri `$UrlLocal -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+            if (`$resp.StatusCode -lt 500) { break }
+        } catch {
+            if (`$_.Exception.Response -and [int]`$_.Exception.Response.StatusCode -lt 500) { break }
+        }
+        Start-Sleep -Seconds 2
+    }
+} else {
+    Write-Host "O Docker Desktop nao respondeu. Abra-o manualmente e tente de novo." -ForegroundColor Red
+    Read-Host "Pressione ENTER para sair"
+    exit 1
+}
+
+Start-Process `$UrlLocal
+"@ | Set-Content -Path $LaunchScript -Encoding utf8
+
+$LaunchBat = Join-Path $AppDir "abrir-sisptrab.bat"
+"@echo off`r`npowershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$LaunchScript`"" |
+    Set-Content -Path $LaunchBat -Encoding ascii
+
+try {
+    $WshShell = New-Object -ComObject WScript.Shell
+    $Desktop = [Environment]::GetFolderPath("Desktop")
+    $Shortcut = $WshShell.CreateShortcut((Join-Path $Desktop "SisPTrab.lnk"))
+    $Shortcut.TargetPath = $LaunchBat
+    $Shortcut.WorkingDirectory = $AppDir
+    $Shortcut.IconLocation = "C:\Windows\System32\shell32.dll,43"
+    $Shortcut.Description = "Abrir o SisPTrab"
+    $Shortcut.Save()
+    Write-Host "Atalho criado: $Desktop\SisPTrab.lnk" -ForegroundColor Green
+    Write-Host "Use-o nas proximas vezes - nao precisa rodar este instalador de novo."
+} catch {
+    Write-Host "Nao foi possivel criar o atalho na Area de Trabalho automaticamente." -ForegroundColor Yellow
+}
 Write-Host ""
 
 Start-Process $UrlLocal

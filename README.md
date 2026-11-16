@@ -22,6 +22,8 @@ instalador faz tudo sozinho:
 - Popula o banco com a estrutura inicial (OMs, naturezas de despesa) e o
   usuário administrador, na primeira execução.
 - Abre o navegador em `http://localhost:3000`.
+- Cria um atalho **SisPTrab** na Área de Trabalho para abrir o sistema nas
+  próximas vezes, sem precisar rodar o instalador de novo.
 
 **Login padrão** (troque a senha após o primeiro acesso):
 
@@ -38,8 +40,9 @@ instalador faz tudo sozinho:
   "o Docker responder", abra o Docker Desktop manualmente, aceite os termos
   e execute o instalador de novo.
 - O sistema continua rodando em segundo plano (via Docker) depois que você
-  fecha a janela do instalador. Para acessar depois, basta abrir o navegador
-  em `http://localhost:3000` — não precisa rodar o `.exe` de novo.
+  fecha a janela do instalador. Para acessar depois, use o atalho **SisPTrab**
+  criado na Área de Trabalho (ele garante que os containers estão de pé e abre
+  o navegador) — não precisa rodar o `.exe` de novo.
 - Para outros computadores da rede local acessarem pelo IP da máquina que
   instalou, libere a porta 3000 no firewall (entrada TCP). Veja mais detalhes
   em [DEPLOY-LAN.md](DEPLOY-LAN.md).
@@ -125,6 +128,13 @@ Acesse [http://localhost:3000](http://localhost:3000).
 > ⚠️ `prisma/seed.ts` apaga todos os dados antes de recriar — não rode contra
 > um banco com dados que você queira manter.
 
+### Atalho rápido (Windows)
+
+Depois do primeiro setup acima, dê duplo-clique em `start-dev.bat` (ou no
+atalho "SisPTrab (Dev)" na Área de Trabalho, se você já criou um) para subir o
+Postgres via Docker e iniciar `yarn dev` automaticamente, abrindo o navegador
+quando a aplicação responder.
+
 ### Scripts úteis
 
 ```bash
@@ -158,7 +168,8 @@ npx prisma studio # GUI do banco de dados
 │   └── types/
 ├── docker-entrypoint.sh    # Migrations + seed condicional no 1º boot
 ├── Dockerfile              # Build da imagem publicada no GHCR
-├── start-sisptrab.ps1      # Código-fonte do instalador (.exe)
+├── start-sisptrab.ps1      # Código-fonte do instalador (.exe) de produção
+├── start-dev.ps1/.bat      # Atalho de desenvolvimento local (yarn dev)
 └── .github/workflows/      # CI: publica a imagem Docker a cada push na main
 ```
 
