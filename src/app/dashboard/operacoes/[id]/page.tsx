@@ -22,7 +22,20 @@ import {
   Upload,
   PenLine,
   Pencil,
+  Search,
 } from "lucide-react";
+import { Pagination } from "@/components/ui/Pagination";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import Link from "next/link";
 import { format } from "date-fns";
 import { ModalOmsSubordinadas } from "@/components/operacoes/ModalOmsSubordinadas";
@@ -37,12 +50,26 @@ import { getStatusPlanoLabel } from "@/lib/statusPlano";
 import { ItemOrdenavel } from "@/components/ui/OrdenarLista";
 import { gerarPdfPlanoTrabalho, OpcoesPdf } from "@/lib/pdf/gerarPdfPlanoTrabalho";
 import { gerarPdfPlanoTrabalhoOperacional } from "@/lib/pdf/gerarPdfPlanoTrabalhoOperacional";
+import { TIPOS_OM, getTipoOMLabel } from "@/lib/constants";
+import { AnexoOperacaoBox } from "@/components/operacoes/AnexoOperacaoBox";
 
 const TIPOS_PLANO: { value: string; label: string }[] = [
   { value: "LOGISTICO", label: "Logístico" },
   { value: "OPERACIONAL_GND3", label: "Operacional (GND 3)" },
   { value: "OPERACIONAL_GND4", label: "Operacional (GND 4)" },
+  { value: "RACAO_R2", label: "Ração (R-2)" },
+  { value: "MUNICAO", label: "Munição" },
 ];
+
+function getTipoPlanoLabel(tipo: string): string {
+  return TIPOS_PLANO.find((tp) => tp.value === tipo)?.label || tipo;
+}
+
+const ITENS_POR_PAGINA_PLANOS = 10;
+
+const COR_UTILIZADO = "#556647";
+const COR_DISPONIVEL = "#d9ddd4";
+const COR_BARRA_OM = "#b45309";
 
 interface OMParticipante {
   id: string;
@@ -128,8 +155,13 @@ export default function OperacaoDetailPage() {
   >({});
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [generatingXlsx, setGeneratingXlsx] = useState(false);
-  const [tipoPlanoAtivo, setTipoPlanoAtivo] = useState<string>("LOGISTICO");
+  const [filtroTipoPlano, setFiltroTipoPlano] = useState<string>("TODOS");
+  const [buscaOmPlanos, setBuscaOmPlanos] = useState<string>("");
+  const [paginaPlanos, setPaginaPlanos] = useState<number>(1);
   const [showImportarModal, setShowImportarModal] = useState(false);
+  const [showAdicionarPlanoModal, setShowAdicionarPlanoModal] = useState(false);
+  const [novoPlanoOmId, setNovoPlanoOmId] = useState("");
+  const [novoPlanoTipo, setNovoPlanoTipo] = useState("LOGISTICO");
 
   // Estado do modal de assinatura (nome/posto/função + consolidado-separado)
   const [showAssinarModal, setShowAssinarModal] = useState(false);
@@ -166,7 +198,7 @@ export default function OperacaoDetailPage() {
   const [showNovaOmForm, setShowNovaOmForm] = useState(false);
   const [novaOmNome, setNovaOmNome] = useState("");
   const [novaOmSigla, setNovaOmSigla] = useState("");
-  const [novaOmTipo, setNovaOmTipo] = useState("BATALHAO");
+  const [novaOmTipo, setNovaOmTipo] = useState("COMPANHIA");
   const [novaOmCodUG, setNovaOmCodUG] = useState("");
   const [erroNovaOm, setErroNovaOm] = useState("");
   const [isCriandoOm, setIsCriandoOm] = useState(false);
@@ -323,6 +355,19 @@ export default function OperacaoDetailPage() {
     }
   };
 
+  const handleAbrirModalNovoPlano = () => {
+    setNovoPlanoOmId(operacao?.omsParticipantes[0]?.omId || "");
+    setNovoPlanoTipo(filtroTipoPlano !== "TODOS" ? filtroTipoPlano : "LOGISTICO");
+    setShowAdicionarPlanoModal(true);
+  };
+
+  const handleConfirmarNovoPlano = () => {
+    if (!operacao || !novoPlanoOmId) return;
+    router.push(
+      `/dashboard/planos/novo?operacaoId=${operacao.id}&omId=${novoPlanoOmId}&tipo=${novoPlanoTipo}`
+    );
+  };
+
   const handleAddOm = async () => {
     if (!novoOmId) {
       setErroAddOm("Selecione uma OM.");
@@ -392,7 +437,7 @@ export default function OperacaoDetailPage() {
       setShowNovaOmForm(false);
       setNovaOmNome("");
       setNovaOmSigla("");
-      setNovaOmTipo("BATALHAO");
+      setNovaOmTipo("COMPANHIA");
       setNovaOmCodUG("");
     } catch (err) {
       console.error("Erro ao cadastrar OM:", err);
@@ -690,14 +735,55 @@ export default function OperacaoDetailPage() {
       0
     ) || 0;
 
-  // Obter todos os planos de um tipo específico de uma OM (pode ter mais de um)
-  const getPlanosByOm = (omId: string, tipo: string = "LOGISTICO") => {
-    return (
-      operacao?.planosTrabalho.filter(
-        (p) => p.omId === omId && p.tipo === tipo
-      ) || []
-    );
-  };
+  // Todos os planos de todas as OMs participantes, em uma única lista,
+  // filtrados por nome/sigla de OM e por tipo de plano.
+  const todasLinhasPlanos = (operacao?.omsParticipantes || []).flatMap(
+    (omPart) =>
+      (operacao?.planosTrabalho || [])
+        .filter((p) => p.omId === omPart.omId)
+        .map((plano) => ({ omPart, plano }))
+  );
+
+  // Valor utilizado (soma dos planos) por OM, para o gráfico de alocação
+  const valorPorOm = (operacao?.omsParticipantes || [])
+    .map((omPart) => ({
+      sigla: omPart.om.sigla,
+      valor: todasLinhasPlanos
+        .filter((l) => l.omPart.omId === omPart.omId)
+        .reduce((acc, l) => acc + (Number(l.plano.valorTotalDespesas) || 0), 0),
+    }))
+    .filter((o) => o.valor > 0)
+    .sort((a, b) => b.valor - a.valor);
+
+  const valorLimiteTotalNum = operacao?.valorLimiteTotal
+    ? Number(operacao.valorLimiteTotal)
+    : 0;
+  const percentualAlocado =
+    valorLimiteTotalNum > 0 ? (valorTotalUtilizado / valorLimiteTotalNum) * 100 : 0;
+  const dadosDonutAlocacao = [
+    { nome: "Utilizado", valor: valorTotalUtilizado, cor: COR_UTILIZADO },
+    {
+      nome: "Disponível",
+      valor: Math.max(valorLimiteTotalNum - valorTotalUtilizado, 0),
+      cor: COR_DISPONIVEL,
+    },
+  ];
+
+  const linhasPlanosFiltradas = todasLinhasPlanos.filter(({ omPart, plano }) => {
+    const tipoOk =
+      filtroTipoPlano === "TODOS" || plano.tipo === filtroTipoPlano;
+    const termo = buscaOmPlanos.trim().toLowerCase();
+    const omOk =
+      !termo ||
+      omPart.om.sigla.toLowerCase().includes(termo) ||
+      omPart.om.nome.toLowerCase().includes(termo);
+    return tipoOk && omOk;
+  });
+
+  const linhasPlanosPaginadas = linhasPlanosFiltradas.slice(
+    (paginaPlanos - 1) * ITENS_POR_PAGINA_PLANOS,
+    paginaPlanos * ITENS_POR_PAGINA_PLANOS
+  );
 
   if (isLoading) {
     return (
@@ -806,7 +892,9 @@ export default function OperacaoDetailPage() {
       </div>
 
       {/* Resumo da Operação */}
-      <div className="bg-white rounded-lg border border-olive-200 mb-6 overflow-x-auto">
+      <div className="bg-white rounded-lg border border-olive-200 mb-6">
+        <div className="flex flex-col lg:flex-row">
+        <div className="flex-1 overflow-x-auto rounded-t-lg lg:rounded-tr-none lg:rounded-l-lg">
         <table className="w-full text-sm">
           <tbody>
             <tr className="border-b border-olive-100">
@@ -871,6 +959,98 @@ export default function OperacaoDetailPage() {
             </tr>
           </tbody>
         </table>
+        </div>
+
+        {valorLimiteTotalNum > 0 && (
+          <div className="lg:w-96 shrink-0 border-t lg:border-t-0 lg:border-l border-olive-100 p-4">
+            <h3 className="text-sm font-semibold text-military-900 mb-0.5">
+              Alocação do Limite
+            </h3>
+            <p className="text-xs text-olive-600 mb-2">
+              % do valor limite já utilizado, e quanto por OM
+            </p>
+
+            <div className="flex items-center gap-3">
+              <div className="relative shrink-0" style={{ width: 92, height: 92 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={dadosDonutAlocacao}
+                      dataKey="valor"
+                      nameKey="nome"
+                      innerRadius="62%"
+                      outerRadius="100%"
+                      startAngle={90}
+                      endAngle={-270}
+                      paddingAngle={2}
+                    >
+                      {dadosDonutAlocacao.map((d) => (
+                        <Cell key={d.nome} fill={d.cor} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Sem Tooltip aqui de propósito: numa roda pequena o balão do
+                    Recharts cobre o rótulo central. O valor de cada fatia já
+                    aparece no rótulo central e na legenda abaixo. */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-lg font-bold text-military-900">
+                    {percentualAlocado.toFixed(1)}%
+                  </span>
+                  <span className="text-[9px] text-olive-600">utilizado</span>
+                </div>
+              </div>
+
+              {valorPorOm.length > 0 && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-olive-700 mb-1">
+                    Valor usado por OM
+                  </p>
+                  <div style={{ height: Math.max(valorPorOm.length * 22, 70) }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={valorPorOm}
+                        layout="vertical"
+                        margin={{ left: 0, right: 40, top: 0, bottom: 0 }}
+                      >
+                        <XAxis type="number" hide />
+                        <YAxis
+                          type="category"
+                          dataKey="sigla"
+                          width={50}
+                          tick={{ fontSize: 9 }}
+                          stroke="#7d8b6f"
+                        />
+                        <Tooltip
+                          formatter={((value: number) => formatCurrency(value)) as any}
+                        />
+                        <Bar dataKey="valor" name="Valor" fill={COR_BARRA_OM} radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-center gap-4 mt-3 text-xs text-olive-700">
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="w-2.5 h-2.5 rounded-full inline-block"
+                  style={{ backgroundColor: COR_UTILIZADO }}
+                />
+                Utilizado
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="w-2.5 h-2.5 rounded-full inline-block"
+                  style={{ backgroundColor: COR_DISPONIVEL }}
+                />
+                Disponível
+              </span>
+            </div>
+          </div>
+        )}
+        </div>
       </div>
 
       {/* OMs Participantes */}
@@ -920,7 +1100,7 @@ export default function OperacaoDetailPage() {
                       </span>
                     </div>
                     <div className="flex items-center justify-between mt-1 text-sm text-olive-600">
-                      <span>{omPart.om.tipo}</span>
+                      <span>{getTipoOMLabel(omPart.om.tipo)}</span>
                       {hasSubordinadas ? (
                         <button
                           onClick={() =>
@@ -968,7 +1148,7 @@ export default function OperacaoDetailPage() {
                       <td className="p-3 font-medium text-military-900">
                         {omPart.om.sigla} - {omPart.om.nome}
                       </td>
-                      <td className="p-3 text-olive-600">{omPart.om.tipo}</td>
+                      <td className="p-3 text-olive-600">{getTipoOMLabel(omPart.om.tipo)}</td>
                       <td className="p-3 text-olive-600">
                         {hasSubordinadas ? (
                           <button
@@ -1001,29 +1181,42 @@ export default function OperacaoDetailPage() {
         )}
       </div>
 
-      {/* Planos de Trabalho (separados por tipo) */}
+      {/* Planos de Trabalho (todos juntos, com filtros) */}
       {operacao.omsParticipantes.length > 0 && (
         <div className="bg-white rounded-lg border border-olive-200 p-6 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <h2 className="text-xl font-semibold text-military-900">
               Planos de Trabalho
             </h2>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-                {TIPOS_PLANO.map((tp) => (
-                  <button
-                    key={tp.value}
-                    onClick={() => setTipoPlanoAtivo(tp.value)}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                      tipoPlanoAtivo === tp.value
-                        ? "bg-white text-military-900 shadow-sm"
-                        : "text-olive-600 hover:text-military-900"
-                    }`}
-                  >
-                    {tp.label}
-                  </button>
-                ))}
+              <div className="relative">
+                <Search className="w-4 h-4 text-olive-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={buscaOmPlanos}
+                  onChange={(e) => {
+                    setBuscaOmPlanos(e.target.value);
+                    setPaginaPlanos(1);
+                  }}
+                  placeholder="Buscar por OM..."
+                  className="pl-9 pr-3 py-1.5 border border-olive-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-military-500 focus:border-transparent"
+                />
               </div>
+              <select
+                value={filtroTipoPlano}
+                onChange={(e) => {
+                  setFiltroTipoPlano(e.target.value);
+                  setPaginaPlanos(1);
+                }}
+                className="px-3 py-1.5 border border-olive-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-military-500 focus:border-transparent"
+              >
+                <option value="TODOS">Todos os tipos</option>
+                {TIPOS_PLANO.map((tp) => (
+                  <option key={tp.value} value={tp.value}>
+                    {tp.label}
+                  </option>
+                ))}
+              </select>
               <Button
                 variant="outline"
                 size="sm"
@@ -1032,168 +1225,160 @@ export default function OperacaoDetailPage() {
                 <Upload className="w-4 h-4 mr-1" />
                 Importar P Trab
               </Button>
+              <Button variant="primary" size="sm" onClick={handleAbrirModalNovoPlano}>
+                <Plus className="w-4 h-4 mr-1" />
+                Adicionar PTrab
+              </Button>
             </div>
           </div>
-          <p className="text-xs text-olive-600 mb-4">
-            {tipoPlanoAtivo === "LOGISTICO"
-              ? "Despesas de apoio à tropa: alimentação, combustível, material, manutenção (Classes I a X)."
-              : "Despesas da execução da operação: diárias, passagens, serviços, equipamentos (GND 3 e GND 4)."}
-          </p>
 
-          {(() => {
-            const linhas = operacao.omsParticipantes.flatMap((omPart) =>
-              getPlanosByOm(omPart.omId, tipoPlanoAtivo).map((plano) => ({ omPart, plano }))
-            );
-            if (linhas.length === 0) {
-              return (
-                <p className="p-4 text-center text-olive-600 bg-white border border-olive-100 rounded-lg">
-                  Nenhum plano{" "}
-                  {TIPOS_PLANO.find((tp) => tp.value === tipoPlanoAtivo)?.label}{" "}
-                  cadastrado nesta operação ainda.
-                </p>
-              );
-            }
-            return (
-              <>
-                {/* Mobile: card list */}
-                <div className="sm:hidden space-y-3">
-                  {linhas.map(({ omPart, plano }) => (
-                    <div key={plano.id} className="border border-olive-100 rounded-lg p-3">
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <Link
-                          href={`/dashboard/planos/${plano.id}`}
-                          className="font-medium text-military-900 hover:underline break-words"
-                        >
-                          {plano.titulo}
-                        </Link>
-                        <span
-                          className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                            plano.status
-                          )}`}
-                        >
-                          {plano.status === "APROVADO" ? (
-                            <CheckCircle2 className="w-3 h-3" />
-                          ) : (
-                            <Clock className="w-3 h-3" />
-                          )}
-                          {getStatusPlanoLabel(plano.status)}
-                        </span>
-                      </div>
+          {linhasPlanosFiltradas.length === 0 ? (
+            <p className="p-4 text-center text-olive-600 bg-white border border-olive-100 rounded-lg">
+              Nenhum plano encontrado com os filtros selecionados.
+            </p>
+          ) : (
+            <>
+              {/* Mobile: card list */}
+              <div className="sm:hidden space-y-3">
+                {linhasPlanosPaginadas.map(({ omPart, plano }) => (
+                  <div key={plano.id} className="border border-olive-100 rounded-lg p-3">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <Link
+                        href={`/dashboard/planos/${plano.id}`}
+                        className="font-medium text-military-900 hover:underline break-words"
+                      >
+                        {plano.titulo}
+                      </Link>
+                      <span
+                        className={`shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                          plano.status
+                        )}`}
+                      >
+                        {plano.status === "APROVADO" ? (
+                          <CheckCircle2 className="w-3 h-3" />
+                        ) : plano.status === "REPROVADO" ? (
+                          <AlertCircle className="w-3 h-3" />
+                        ) : (
+                          <Clock className="w-3 h-3" />
+                        )}
+                        {getStatusPlanoLabel(plano.status)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-wrap mb-1">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-olive-100 text-olive-800">
+                        {getTipoPlanoLabel(plano.tipo)}
+                      </span>
                       {plano.importado && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 mb-1">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
                           Importado
                         </span>
                       )}
-                      <div className="flex items-center justify-between text-sm text-olive-600">
-                        <span>{omPart.om.sigla} - {omPart.om.nome}</span>
-                        <span>v{plano.versao}</span>
-                      </div>
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="font-semibold text-military-900">
-                          {formatCurrency(Number(plano.valorTotalDespesas || 0))}
-                        </span>
-                        <Link href={`/dashboard/planos/${plano.id}`}>
-                          <Button variant="outline" size="sm">
-                            Abrir
-                          </Button>
-                        </Link>
-                      </div>
                     </div>
-                  ))}
-                </div>
+                    <div className="flex items-center justify-between text-sm text-olive-600">
+                      <span>{omPart.om.sigla} - {omPart.om.nome}</span>
+                      <span>v{plano.versao}</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="font-semibold text-military-900">
+                        {formatCurrency(Number(plano.valorTotalDespesas || 0))}
+                      </span>
+                      <Link href={`/dashboard/planos/${plano.id}`}>
+                        <Button variant="outline" size="sm">
+                          Abrir
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+                <Pagination
+                  currentPage={paginaPlanos}
+                  totalItems={linhasPlanosFiltradas.length}
+                  itemsPerPage={ITENS_POR_PAGINA_PLANOS}
+                  onPageChange={setPaginaPlanos}
+                />
+              </div>
 
-                {/* Desktop/tablet: table */}
-                <div className="hidden sm:block overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-olive-200 bg-gray-50">
-                        <th className="text-left p-3 font-medium text-olive-700">OM</th>
-                        <th className="text-left p-3 font-medium text-olive-700">Título</th>
-                        <th className="text-right p-3 font-medium text-olive-700">Versão</th>
-                        <th className="text-right p-3 font-medium text-olive-700">Valor</th>
-                        <th className="text-left p-3 font-medium text-olive-700">Status</th>
-                        <th className="text-right p-3 font-medium text-olive-700"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {linhas.map(({ omPart, plano }) => (
-                        <tr
-                          key={plano.id}
-                          className="border-b border-olive-100 last:border-0 hover:bg-gray-50"
-                        >
-                          <td className="p-3 text-military-900">
-                            {omPart.om.sigla} - {omPart.om.nome}
-                          </td>
-                          <td className="p-3">
-                            <Link
-                              href={`/dashboard/planos/${plano.id}`}
-                              className="font-medium text-military-900 hover:underline"
-                            >
-                              {plano.titulo}
-                            </Link>
-                            {plano.importado && (
-                              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                                Importado
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-3 text-right text-olive-600">
-                            {plano.versao}
-                          </td>
-                          <td className="p-3 text-right text-olive-600">
-                            {formatCurrency(Number(plano.valorTotalDespesas || 0))}
-                          </td>
-                          <td className="p-3">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                                plano.status
-                              )}`}
-                            >
-                              {plano.status === "APROVADO" ? (
-                                <CheckCircle2 className="w-3 h-3" />
-                              ) : (
-                                <Clock className="w-3 h-3" />
-                              )}
-                              {getStatusPlanoLabel(plano.status)}
+              {/* Desktop/tablet: table */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-olive-200 bg-gray-50">
+                      <th className="text-left p-3 font-medium text-olive-700">OM</th>
+                      <th className="text-left p-3 font-medium text-olive-700">Tipo</th>
+                      <th className="text-left p-3 font-medium text-olive-700">Título</th>
+                      <th className="text-right p-3 font-medium text-olive-700">Versão</th>
+                      <th className="text-right p-3 font-medium text-olive-700">Valor</th>
+                      <th className="text-left p-3 font-medium text-olive-700">Status</th>
+                      <th className="text-right p-3 font-medium text-olive-700"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {linhasPlanosPaginadas.map(({ omPart, plano }) => (
+                      <tr
+                        key={plano.id}
+                        className="border-b border-olive-100 last:border-0 hover:bg-gray-50"
+                      >
+                        <td className="p-3 text-military-900">
+                          {omPart.om.sigla} - {omPart.om.nome}
+                        </td>
+                        <td className="p-3 text-olive-600 whitespace-nowrap">
+                          {getTipoPlanoLabel(plano.tipo)}
+                        </td>
+                        <td className="p-3">
+                          <Link
+                            href={`/dashboard/planos/${plano.id}`}
+                            className="font-medium text-military-900 hover:underline"
+                          >
+                            {plano.titulo}
+                          </Link>
+                          {plano.importado && (
+                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                              Importado
                             </span>
-                          </td>
-                          <td className="p-3 text-right">
-                            <Link href={`/dashboard/planos/${plano.id}`}>
-                              <Button variant="outline" size="sm">
-                                Abrir
-                              </Button>
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            );
-          })()}
-
-          <div className="mt-3">
-            {(() => {
-              // Toda OM participante pode receber um novo plano, sem
-              // restrição de ser a OM do usuário logado (qualquer usuário
-              // autenticado pode criar planos de trabalho).
-              return (
-                <div className="flex flex-wrap gap-2">
-                  {operacao.omsParticipantes.map((omPart) => (
-                    <Link
-                      key={omPart.id}
-                      href={`/dashboard/planos/novo?operacaoId=${operacao.id}&tipo=${tipoPlanoAtivo}&omId=${omPart.omId}`}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 border-2 border-dashed border-olive-300 rounded-lg text-olive-700 hover:border-military-400 hover:text-military-700 hover:bg-white transition-colors text-sm font-medium"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Criar plano para {omPart.om.sigla}
-                    </Link>
-                  ))}
-                </div>
-              );
-            })()}
-          </div>
+                          )}
+                        </td>
+                        <td className="p-3 text-right text-olive-600">
+                          {plano.versao}
+                        </td>
+                        <td className="p-3 text-right text-olive-600">
+                          {formatCurrency(Number(plano.valorTotalDespesas || 0))}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                              plano.status
+                            )}`}
+                          >
+                            {plano.status === "APROVADO" ? (
+                              <CheckCircle2 className="w-3 h-3" />
+                            ) : plano.status === "REPROVADO" ? (
+                              <AlertCircle className="w-3 h-3" />
+                            ) : (
+                              <Clock className="w-3 h-3" />
+                            )}
+                            {getStatusPlanoLabel(plano.status)}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <Link href={`/dashboard/planos/${plano.id}`}>
+                            <Button variant="outline" size="sm">
+                              Abrir
+                            </Button>
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <Pagination
+                  currentPage={paginaPlanos}
+                  totalItems={linhasPlanosFiltradas.length}
+                  itemsPerPage={ITENS_POR_PAGINA_PLANOS}
+                  onPageChange={setPaginaPlanos}
+                />
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1254,6 +1439,22 @@ export default function OperacaoDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Documentos assinados */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <AnexoOperacaoBox
+          operacaoId={operacao.id}
+          tipo="PTRAB_ASSINADO"
+          titulo="PTrab assinado"
+          descricao="Envie o Plano de Trabalho já assinado (ex.: assinado no gov.br)."
+        />
+        <AnexoOperacaoBox
+          operacaoId={operacao.id}
+          tipo="DOR_ASSINADO"
+          titulo="DOR assinado"
+          descricao="Envie o Documento de Oficialização da Requisição (DOR) já assinado."
+        />
+      </div>
 
       {/* Modal de Assinatura (nome/posto/função + consolidado-separado) */}
       <ModalAssinarGovBr
@@ -1367,12 +1568,11 @@ export default function OperacaoDetailPage() {
                           onChange={(e) => setNovaOmTipo(e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 bg-white text-sm"
                         >
-                          <option value="COMPANHIA">Companhia</option>
-                          <option value="BATALHAO">Batalhão</option>
-                          <option value="BRIGADA">Brigada</option>
-                          <option value="GRUPAMENTO">Grupamento</option>
-                          <option value="CMA">CMA</option>
-                          <option value="COTER">COTER</option>
+                          {TIPOS_OM.map((t) => (
+                            <option key={t.value} value={t.value}>
+                              {t.label}
+                            </option>
+                          ))}
                         </select>
                       </div>
                       <Input
@@ -1503,6 +1703,66 @@ export default function OperacaoDetailPage() {
                 isLoading={isGerandoDor}
               >
                 Gerar DOR
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Adicionar Plano de Trabalho */}
+      {showAdicionarPlanoModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Adicionar Plano de Trabalho
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-olive-800 mb-1">
+                  OM
+                </label>
+                <select
+                  value={novoPlanoOmId}
+                  onChange={(e) => setNovoPlanoOmId(e.target.value)}
+                  className="w-full px-3 py-2 border border-olive-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 bg-white text-sm"
+                >
+                  {operacao.omsParticipantes.map((omPart) => (
+                    <option key={omPart.id} value={omPart.omId}>
+                      {omPart.om.sigla} - {omPart.om.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-olive-800 mb-1">
+                  Tipo de Plano
+                </label>
+                <select
+                  value={novoPlanoTipo}
+                  onChange={(e) => setNovoPlanoTipo(e.target.value)}
+                  className="w-full px-3 py-2 border border-olive-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 bg-white text-sm"
+                >
+                  {TIPOS_PLANO.map((tp) => (
+                    <option key={tp.value} value={tp.value}>
+                      {tp.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => setShowAdicionarPlanoModal(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleConfirmarNovoPlano}
+                disabled={!novoPlanoOmId}
+              >
+                Continuar
               </Button>
             </div>
           </div>

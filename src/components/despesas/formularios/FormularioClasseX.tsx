@@ -47,7 +47,7 @@ export function FormularioClasseX({
 
   useEffect(() => {
     calcular();
-  }, [params]);
+  }, [params, planoOm]);
 
   const calcular = () => {
     try {

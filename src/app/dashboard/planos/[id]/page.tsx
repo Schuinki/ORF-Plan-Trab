@@ -53,6 +53,12 @@ export default function PlanoTrabalhoPage() {
   const [omsLoading, setOmsLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [userOm, setUserOm] = useState<UserOM | null>(null);
+  const [ultimaDevolucao, setUltimaDevolucao] = useState<{
+    motivo: string | null;
+    dataAcao: string;
+    aprovador: { postoGraduacao: string; nomeCompleto: string; nomeGuerra: string | null };
+    omNivel?: { sigla: string };
+  } | null>(null);
 
   // Estado para modal de exportação PDF
   const [showPdfModal, setShowPdfModal] = useState(false);
@@ -101,9 +107,10 @@ export default function PlanoTrabalhoPage() {
 
   const fetchData = async () => {
     try {
-      const [planoRes, omsRes] = await Promise.all([
+      const [planoRes, omsRes, historicoRes] = await Promise.all([
         fetch(`/api/planos/${id}`),
         fetch("/api/organizacoes"),
+        fetch(`/api/planos/${id}/historico-aprovacoes`),
       ]);
 
       if (planoRes.ok) {
@@ -117,6 +124,18 @@ export default function PlanoTrabalhoPage() {
       if (omsRes.ok) {
         setOms(await omsRes.json());
         setOmsLoading(false);
+      }
+
+      // Motivo da devolução mais recente, para o aviso no topo da página
+      // quando o plano volta com status "Pendente de Correção".
+      if (historicoRes.ok) {
+        const historico = await historicoRes.json();
+        const reprovacoes = historico.filter(
+          (h: { acao: string }) => h.acao === "REPROVADO"
+        );
+        setUltimaDevolucao(
+          reprovacoes.length > 0 ? reprovacoes[reprovacoes.length - 1] : null
+        );
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -150,6 +169,10 @@ export default function PlanoTrabalhoPage() {
   const nivelAtualCadeia = plano?.cadeiaAprovacao?.find(
     (n) => n.status === "atual"
   );
+
+  // Rascunho ou devolvido para correção: ainda editável pelo responsável
+  const isEditable =
+    plano?.status === "RASCUNHO" || plano?.status === "REPROVADO";
 
   const handleEnviarAnalise = async () => {
     if (
@@ -499,7 +522,7 @@ export default function PlanoTrabalhoPage() {
                   onClick: handleGerarXlsx,
                   disabled: isGeneratingXlsx,
                 },
-                ...(plano.status === "RASCUNHO"
+                ...(isEditable
                   ? [
                       {
                         label: "Importar XLSX",
@@ -519,10 +542,12 @@ export default function PlanoTrabalhoPage() {
                 },
               ]}
             />
-            {plano.status === "RASCUNHO" && (
+            {isEditable && (
               <Button variant="primary" onClick={handleEnviarAnalise}>
                 <Check className="w-4 h-4 mr-2" />
-                Enviar para Análise
+                {plano.status === "REPROVADO"
+                  ? "Reenviar para Análise"
+                  : "Enviar para Análise"}
               </Button>
             )}
             {plano.status === "EM_ANALISE" && canApproveCurrentLevel() && (
@@ -547,6 +572,61 @@ export default function PlanoTrabalhoPage() {
           </div>
         </div>
       </div>
+
+      {/* Aviso de devolução para correção */}
+      {plano.status === "REPROVADO" && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg
+                className="h-5 w-5 text-red-600"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+            <div className="ml-3 flex-1">
+              <h3 className="text-sm font-medium text-red-800">
+                Plano devolvido para correção
+              </h3>
+              <div className="mt-2 text-sm text-red-700">
+                <p>
+                  Este plano foi reprovado{" "}
+                  {ultimaDevolucao && (
+                    <>
+                      por{" "}
+                      <span className="font-semibold">
+                        {ultimaDevolucao.aprovador.postoGraduacao}{" "}
+                        {ultimaDevolucao.aprovador.nomeGuerra ||
+                          ultimaDevolucao.aprovador.nomeCompleto}
+                      </span>
+                      {ultimaDevolucao.omNivel &&
+                        ` (S4 - ${ultimaDevolucao.omNivel.sigla})`}{" "}
+                      em{" "}
+                      {new Date(ultimaDevolucao.dataAcao).toLocaleString(
+                        "pt-BR",
+                        { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }
+                      )}
+                    </>
+                  )}
+                  . Corrija o que foi apontado e reenvie para análise.
+                </p>
+                {ultimaDevolucao?.motivo && (
+                  <p className="mt-2 p-2 bg-red-100/60 border border-red-300 rounded">
+                    <span className="font-semibold">Motivo: </span>
+                    {ultimaDevolucao.motivo}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Alerta de Bloqueio */}
       {plano.status === "EM_ANALISE" && (
@@ -599,7 +679,11 @@ export default function PlanoTrabalhoPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="text-sm text-gray-600">Status</div>
-          <div className="text-lg font-semibold text-gray-900">
+          <div
+            className={`text-lg font-semibold ${
+              plano.status === "REPROVADO" ? "text-red-600" : "text-gray-900"
+            }`}
+          >
             {getStatusPlanoLabel(plano.status)}
           </div>
         </div>
@@ -632,7 +716,7 @@ export default function PlanoTrabalhoPage() {
               dataFinal: String(plano.operacao.dataFinal),
               diasTotais: plano.operacao.diasTotais,
             }}
-            canEdit={plano.status === "RASCUNHO"}
+            canEdit={isEditable}
             onRefresh={fetchData}
             userOm={userOm}
             planoOm={
@@ -651,7 +735,7 @@ export default function PlanoTrabalhoPage() {
             planoTipo={plano.tipo}
             oms={oms}
             loadingOms={omsLoading}
-            canEdit={plano.status === "RASCUNHO"}
+            canEdit={isEditable}
             onRefresh={fetchData}
             userOm={userOm}
             planoOm={
@@ -669,7 +753,7 @@ export default function PlanoTrabalhoPage() {
             planoId={id}
             oms={oms}
             loadingOms={omsLoading}
-            canEdit={plano.status === "RASCUNHO"}
+            canEdit={isEditable}
             onRefresh={fetchData}
           />
         ) : plano.tipo === "MUNICAO" ? (
@@ -677,7 +761,7 @@ export default function PlanoTrabalhoPage() {
             planoId={id}
             oms={oms}
             loadingOms={omsLoading}
-            canEdit={plano.status === "RASCUNHO"}
+            canEdit={isEditable}
             onRefresh={fetchData}
           />
         ) : null}

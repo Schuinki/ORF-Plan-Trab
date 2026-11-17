@@ -223,3 +223,21 @@ export function listarTodosArmamentos(): {
     info,
   }));
 }
+
+/**
+ * Aplica overrides de preço (vindos de Configurações > Preços) sobre a tabela
+ * ARMAMENTOS em memória. Chaves desconhecidas são ignoradas.
+ */
+export function aplicarOverridesArmamentos(
+  overrides: Record<
+    string,
+    Partial<Pick<ArmamentoInfo, "valorMEM" | "custoMntDiaBase" | "custoMntDiaOpMil">>
+  >
+): void {
+  for (const [chave, valores] of Object.entries(overrides)) {
+    const armamento = (ARMAMENTOS as Record<string, ArmamentoInfo>)[chave];
+    if (armamento) {
+      Object.assign(armamento, valores);
+    }
+  }
+}

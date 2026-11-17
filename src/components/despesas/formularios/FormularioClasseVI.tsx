@@ -86,7 +86,7 @@ export function FormularioClasseVI({
 
   useEffect(() => {
     calcular();
-  }, [equipamentos]);
+  }, [equipamentos, planoOm]);
 
   const calcular = () => {
     if (equipamentos.length === 0) {

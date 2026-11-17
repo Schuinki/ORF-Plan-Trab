@@ -73,7 +73,7 @@ export function FormularioClasseVIII({
 
   useEffect(() => {
     calcular();
-  }, [materiais]);
+  }, [materiais, planoOm]);
 
   const calcular = () => {
     if (materiais.length === 0) {

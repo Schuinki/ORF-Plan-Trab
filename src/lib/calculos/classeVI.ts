@@ -332,6 +332,24 @@ export const VALORES_REFERENCIA_ENGENHARIA = Object.fromEntries(
   Object.entries(EQUIPAMENTOS).map(([key, value]) => [key, value.totalHora])
 );
 
+/**
+ * Aplica overrides de preço (vindos de Configurações > Preços) sobre a tabela
+ * EQUIPAMENTOS em memória. Chaves desconhecidas são ignoradas.
+ */
+export function aplicarOverridesEquipamentosEngenharia(
+  overrides: Record<
+    string,
+    Partial<Pick<EquipamentoInfo, "pecasInsumos" | "svMnt" | "totalHora">>
+  >
+): void {
+  for (const [chave, valores] of Object.entries(overrides)) {
+    const equipamento = (EQUIPAMENTOS as Record<string, EquipamentoInfo>)[chave];
+    if (equipamento) {
+      Object.assign(equipamento, valores);
+    }
+  }
+}
+
 export const CATEGORIAS_EQUIPAMENTOS = {
   GERADORES: Object.keys(EQUIPAMENTOS).filter(
     (k) => EQUIPAMENTOS[k as keyof typeof EQUIPAMENTOS].categoria === "GERADORES"

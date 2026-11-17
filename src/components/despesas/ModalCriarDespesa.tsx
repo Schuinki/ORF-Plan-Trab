@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { X, Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
@@ -95,6 +95,23 @@ export function ModalCriarDespesa({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const classeSelecionada = classes.find((c) => c.id === classeId);
+
+  // O carimbo ("Destinado ao X") deve refletir a OM de destino escolhida no
+  // rateio, não a OM proprietária do Plano de Trabalho — caso contrário o
+  // carimbo fica "invertido" em relação à coluna de OM destino no PDF quando
+  // a despesa é destinada a uma OM diferente da OM do plano.
+  const unidadeOmEfetiva = useMemo<UserOM | null>(() => {
+    const omsDestino = rateioOMs
+      .map((r) => oms.find((om) => om.id === r.omDestinoId))
+      .filter((om): om is OMSelect => Boolean(om));
+    if (omsDestino.length === 0) return planoOm;
+    const siglas = Array.from(new Set(omsDestino.map((om) => om.sigla)));
+    return {
+      id: omsDestino[0].id,
+      nome: omsDestino.map((om) => om.nome).join(" / "),
+      sigla: siglas.join(" / "),
+    };
+  }, [rateioOMs, oms, planoOm]);
 
   useEffect(() => {
     if (isOpen) {
@@ -536,7 +553,7 @@ export function ModalCriarDespesa({
               rateioNaturezas={rateioNaturezas}
               operacao={operacao}
               userOm={userOm}
-              planoOm={planoOm}
+              planoOm={unidadeOmEfetiva}
               naturezas={naturezas}
               onParametrosChange={handleParametrosChange}
               onRateioNaturezasChange={setRateioNaturezas}

@@ -93,7 +93,7 @@ export function FormularioClasseII({
 
   useEffect(() => {
     calcular();
-  }, [materiais, rateioNaturezas]);
+  }, [materiais, rateioNaturezas, planoOm]);
 
   const calcular = () => {
     if (materiais.length === 0) {

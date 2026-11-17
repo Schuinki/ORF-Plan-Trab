@@ -19,6 +19,7 @@ export async function GET() {
         sigla: true,
         tipo: true,
         codUG: true,
+        omPaiId: true,
       },
       orderBy: {
         nome: 'asc',

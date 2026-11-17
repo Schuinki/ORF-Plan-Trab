@@ -19,6 +19,16 @@ interface NaturezaValor {
   valor: number;
 }
 
+interface RascunhoDespesaOperacional {
+  id: string;
+  gnd: string;
+  titulo: string;
+  objeto: string | null;
+  objetivo: string | null;
+  finalidade: string | null;
+  memoriaCalculo: string | null;
+}
+
 const TITULOS_SUGERIDOS = [
   "DIÁRIA",
   "PASSAGEM AÉREA/RODOVIÁRIA",
@@ -81,12 +91,14 @@ export function ModalCriarDespesaOperacional({
   const [situacaoPregao, setSituacaoPregao] = useState("");
   const [observacaoPregao, setObservacaoPregao] = useState("");
   const [naturezasValor, setNaturezasValor] = useState<NaturezaValor[]>([]);
+  const [rascunhos, setRascunhos] = useState<RascunhoDespesaOperacional[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (isOpen) {
       carregarNaturezas();
+      carregarRascunhos();
 
       if (despesaToEdit) {
         setOmDestinoId(despesaToEdit.omDestino.id);
@@ -128,6 +140,39 @@ export function ModalCriarDespesaOperacional({
     } finally {
       setLoadingNaturezas(false);
     }
+  };
+
+  const carregarRascunhos = async () => {
+    try {
+      const response = await fetch(
+        `/api/configuracoes/despesa-operacional-rascunho?gnd=${encodeURIComponent(gndDoPlano)}`
+      );
+      if (response.ok) {
+        setRascunhos(await response.json());
+      }
+    } catch (error) {
+      console.error("Erro ao carregar modelos de despesa operacional:", error);
+    }
+  };
+
+  // Ao digitar/escolher um título que bate com um modelo configurado pelo
+  // admin, pré-preenche Objeto/Objetivo/Finalidade/Memória de Cálculo — só
+  // quando esses campos ainda estão vazios, pra nunca sobrescrever o que o
+  // usuário já tiver escrito ou editado.
+  const handleTituloChange = (novoTitulo: string) => {
+    setTitulo(novoTitulo);
+    if (despesaToEdit) return;
+
+    const modelo = rascunhos.find(
+      (r) => r.titulo.trim().toLowerCase() === novoTitulo.trim().toLowerCase()
+    );
+    if (!modelo) return;
+    if (objeto.trim() || objetivo.trim() || finalidade.trim() || memoriaCalculo.trim()) return;
+
+    setObjeto(modelo.objeto || "");
+    setObjetivo(modelo.objetivo || "");
+    setFinalidade(modelo.finalidade || "");
+    setMemoriaCalculo(modelo.memoriaCalculo || "");
   };
 
   const resetForm = () => {
@@ -347,15 +392,23 @@ export function ModalCriarDespesaOperacional({
             <input
               list="titulos-sugeridos"
               value={titulo}
-              onChange={(e) => setTitulo(e.target.value)}
+              onChange={(e) => handleTituloChange(e.target.value)}
               placeholder="Ex: DIÁRIA, PASSAGEM AÉREA/RODOVIÁRIA..."
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-600 focus:border-transparent"
             />
             <datalist id="titulos-sugeridos">
-              {TITULOS_SUGERIDOS.map((t) => (
+              {Array.from(
+                new Set([...rascunhos.map((r) => r.titulo), ...TITULOS_SUGERIDOS])
+              ).map((t) => (
                 <option key={t} value={t} />
               ))}
             </datalist>
+            {rascunhos.length > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                Escolha um título da lista para pré-preencher Objeto, Objetivo, Finalidade e
+                Memória de Cálculo com o modelo configurado pelo administrador.
+              </p>
+            )}
             {errors.titulo && (
               <p className="text-sm text-red-600 mt-1">{errors.titulo}</p>
             )}

@@ -87,7 +87,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   RASCUNHO: { label: "Não enviado", color: "#9aa68d" },
   EM_ANALISE: { label: "Aguardando", color: "#d97706" },
   APROVADO: { label: "Autorizado", color: "#556647" },
-  REPROVADO: { label: "Reprovado", color: "#dc2626" },
+  REPROVADO: { label: "Pendente de Correção", color: "#dc2626" },
 };
 
 function formatCurrency(value: number): string {

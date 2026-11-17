@@ -71,10 +71,16 @@ export async function POST(
       );
     }
 
-    // Validar status
-    if (plano.status !== StatusPlano.RASCUNHO) {
+    // Validar status (rascunho ou devolvido para correção)
+    if (
+      plano.status !== StatusPlano.RASCUNHO &&
+      plano.status !== StatusPlano.REPROVADO
+    ) {
       return NextResponse.json(
-        { error: "Apenas planos em rascunho podem ser enviados para análise" },
+        {
+          error:
+            "Apenas planos em rascunho ou pendentes de correção podem ser enviados para análise",
+        },
         { status: 400 }
       );
     }
@@ -142,7 +148,7 @@ export async function POST(
         planoTrabalhoId: id,
         operacaoId: plano.operacaoId,
         metadados: {
-          statusAnterior: StatusPlano.RASCUNHO,
+          statusAnterior: plano.status,
           statusNovo: StatusPlano.EM_ANALISE,
           nivelAprovacao: 1,
           proximoAprovador: `S4 - ${primeiroNivel?.omSigla || plano.om.sigla}`,

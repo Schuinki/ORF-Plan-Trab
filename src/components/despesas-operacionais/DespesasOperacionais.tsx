@@ -1,7 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Plus, Trash2, Loader2, AlertCircle, Edit } from "lucide-react";
+import { Fragment, useState, useEffect } from "react";
+import {
+  Plus,
+  Trash2,
+  Loader2,
+  AlertCircle,
+  Edit,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { ModalCriarDespesaOperacional } from "./ModalCriarDespesaOperacional";
 import { Button } from "@/components/ui/Button";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
@@ -75,6 +85,32 @@ export function DespesasOperacionais({
   const [despesaToEdit, setDespesaToEdit] = useState<DespesaOperacional | null>(
     null
   );
+  const [carimboAbertoIds, setCarimboAbertoIds] = useState<Set<string>>(new Set());
+  const [detalhesAbertoIds, setDetalhesAbertoIds] = useState<Set<string>>(new Set());
+
+  const toggleCarimbo = (id: string) => {
+    setCarimboAbertoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleDetalhes = (id: string) => {
+    setDetalhesAbertoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     carregarDespesas();
@@ -263,117 +299,180 @@ export function DespesasOperacionais({
                     </span>
                   </div>
 
-                  <div className="divide-y divide-gray-100">
-                    {despesasDoOm.map((despesa) => (
-                      <div key={despesa.id} className="p-4">
-                        <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0 w-full">
-                            <div className="flex items-center gap-2 mb-2 flex-wrap">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-green-100 text-green-800">
-                                {despesa.titulo}
-                              </span>
-                              {despesa.importado && (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-amber-100 text-amber-800">
-                                  Importado
-                                </span>
-                              )}
-                              {despesa.omCompradora.id !== despesa.omDestino.id && (
-                                <span className="text-xs text-gray-500">
-                                  compra: {despesa.omCompradora.sigla}
-                                </span>
-                              )}
-                              <span className="text-sm font-semibold text-gray-900">
-                                {formatCurrency(valorDespesa(despesa))}
-                              </span>
-                            </div>
-
-                            <div className="mb-3">
-                              <p className="text-xs text-gray-500 mb-1">
-                                Naturezas de Despesa
-                              </p>
-                              <div className="space-y-1">
-                                {despesa.naturezas.map((n) => (
-                                  <div
-                                    key={n.id}
-                                    className="flex items-center justify-between text-xs"
-                                  >
-                                    <span className="text-gray-700 font-mono">
-                                      {n.natureza.codigo} - {n.natureza.nome} (
-                                      {n.natureza.gnd})
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50/60">
+                          <th className="text-left p-3 font-medium text-gray-600">
+                            Item
+                          </th>
+                          <th className="text-right p-3 font-medium text-gray-600">
+                            Valor
+                          </th>
+                          <th className="p-3 text-right font-medium text-gray-600" style={{ minWidth: 130 }}>
+                            Ações
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {despesasDoOm.map((despesa) => {
+                          const carimboAberto = carimboAbertoIds.has(despesa.id);
+                          const detalhesAberto = detalhesAbertoIds.has(despesa.id);
+                          return (
+                            <Fragment key={despesa.id}>
+                              <tr className="align-top">
+                                <td className="p-3">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-green-100 text-green-800">
+                                      {despesa.titulo}
                                     </span>
-                                    <span className="font-medium text-gray-900">
-                                      {formatCurrency(Number(n.valor))}
-                                    </span>
+                                    {despesa.importado && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-100 text-amber-800">
+                                        Importado
+                                      </span>
+                                    )}
+                                    {despesa.omCompradora.id !== despesa.omDestino.id && (
+                                      <span className="text-xs text-gray-500">
+                                        compra: {despesa.omCompradora.sigla}
+                                      </span>
+                                    )}
                                   </div>
-                                ))}
-                              </div>
-                            </div>
-
-                            {despesa.objeto && (
-                              <p className="text-xs text-gray-700 mb-1">
-                                <span className="font-medium">Objeto:</span>{" "}
-                                {despesa.objeto}
-                              </p>
-                            )}
-                            {despesa.objetivo && (
-                              <p className="text-xs text-gray-700 mb-1">
-                                <span className="font-medium">Objetivo:</span>{" "}
-                                {despesa.objetivo}
-                              </p>
-                            )}
-                            {despesa.finalidade && (
-                              <p className="text-xs text-gray-700 mb-1">
-                                <span className="font-medium">
-                                  Finalidade:
-                                </span>{" "}
-                                {despesa.finalidade}
-                              </p>
-                            )}
-                            <p className="text-xs text-gray-700 mb-1 whitespace-pre-wrap">
-                              <span className="font-medium">
-                                Memória de Cálculo:
-                              </span>{" "}
-                              {despesa.memoriaCalculo}
-                            </p>
-                            {(despesa.pregaoUasg || despesa.situacaoPregao) && (
-                              <p className="text-xs text-gray-500 mt-2">
-                                {despesa.pregaoUasg}
-                                {despesa.pregaoUasg && despesa.situacaoPregao
-                                  ? " — "
-                                  : ""}
-                                {situacaoLabel(despesa.situacaoPregao)}
-                                {despesa.observacaoPregao &&
-                                  ` (${despesa.observacaoPregao})`}
-                              </p>
-                            )}
-                          </div>
-
-                          {canEdit && (
-                            <div className="flex items-center gap-2 ml-0 sm:ml-4 self-end sm:self-auto shrink-0">
-                              <button
-                                onClick={() => handleEdit(despesa)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                                title="Editar despesa"
-                              >
-                                <Edit className="w-5 h-5" />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(despesa.id)}
-                                disabled={deletingId === despesa.id}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Excluir despesa"
-                              >
-                                {deletingId === despesa.id ? (
-                                  <Loader2 className="w-5 h-5 animate-spin" />
-                                ) : (
-                                  <Trash2 className="w-5 h-5" />
-                                )}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                                </td>
+                                <td className="p-3 text-right font-semibold text-gray-900 whitespace-nowrap">
+                                  {formatCurrency(valorDespesa(despesa))}
+                                </td>
+                                <td className="p-3 text-right whitespace-nowrap">
+                                  <button
+                                    onClick={() => toggleCarimbo(despesa.id)}
+                                    className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-md"
+                                    title="Ver carimbo"
+                                  >
+                                    {carimboAberto ? (
+                                      <EyeOff className="w-4 h-4" />
+                                    ) : (
+                                      <Eye className="w-4 h-4" />
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={() => toggleDetalhes(despesa.id)}
+                                    className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-md"
+                                    title="Mais informações"
+                                  >
+                                    {detalhesAberto ? (
+                                      <ChevronUp className="w-4 h-4" />
+                                    ) : (
+                                      <ChevronDown className="w-4 h-4" />
+                                    )}
+                                  </button>
+                                  {canEdit && (
+                                    <>
+                                      <button
+                                        onClick={() => handleEdit(despesa)}
+                                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                        title="Editar despesa"
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDelete(despesa.id)}
+                                        disabled={deletingId === despesa.id}
+                                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title="Excluir despesa"
+                                      >
+                                        {deletingId === despesa.id ? (
+                                          <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                          <Trash2 className="w-4 h-4" />
+                                        )}
+                                      </button>
+                                    </>
+                                  )}
+                                </td>
+                              </tr>
+                              {carimboAberto && (
+                                <tr className="bg-gray-50">
+                                  <td colSpan={3} className="p-3">
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                                      Carimbo
+                                    </label>
+                                    <div className="text-xs text-gray-700 whitespace-pre-wrap font-mono bg-white border border-gray-200 rounded-md p-2 space-y-1">
+                                      {despesa.objeto && (
+                                        <p>
+                                          <span className="font-medium">Objeto:</span>{" "}
+                                          {despesa.objeto}
+                                        </p>
+                                      )}
+                                      {despesa.objetivo && (
+                                        <p>
+                                          <span className="font-medium">Objetivo:</span>{" "}
+                                          {despesa.objetivo}
+                                        </p>
+                                      )}
+                                      {despesa.finalidade && (
+                                        <p>
+                                          <span className="font-medium">Finalidade:</span>{" "}
+                                          {despesa.finalidade}
+                                        </p>
+                                      )}
+                                      <p>
+                                        <span className="font-medium">Memória de Cálculo:</span>{" "}
+                                        {despesa.memoriaCalculo}
+                                      </p>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                              {detalhesAberto && (
+                                <tr className="bg-gray-50">
+                                  <td colSpan={3} className="p-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                      <div>
+                                        <p className="text-xs font-medium text-gray-500 mb-1">
+                                          Naturezas de Despesa
+                                        </p>
+                                        <div className="space-y-1">
+                                          {despesa.naturezas.map((n) => (
+                                            <div
+                                              key={n.id}
+                                              className="flex items-center justify-between gap-2 text-xs"
+                                            >
+                                              <span className="text-gray-700 font-mono whitespace-nowrap">
+                                                {n.natureza.codigo} ({n.natureza.gnd})
+                                              </span>
+                                              <span className="font-medium text-gray-900 whitespace-nowrap">
+                                                {formatCurrency(Number(n.valor))}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs font-medium text-gray-500 mb-1">
+                                          Pregão
+                                        </p>
+                                        {despesa.pregaoUasg || despesa.situacaoPregao ? (
+                                          <div className="text-xs text-gray-600 space-y-0.5">
+                                            {despesa.pregaoUasg && <p>{despesa.pregaoUasg}</p>}
+                                            {situacaoLabel(despesa.situacaoPregao) && (
+                                              <p>{situacaoLabel(despesa.situacaoPregao)}</p>
+                                            )}
+                                            {despesa.observacaoPregao && (
+                                              <p className="text-gray-500">{despesa.observacaoPregao}</p>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <p className="text-xs text-gray-400">—</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               );

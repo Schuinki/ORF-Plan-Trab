@@ -90,7 +90,7 @@ export function FormularioClasseIX({
 
   useEffect(() => {
     calcular();
-  }, [viaturas]);
+  }, [viaturas, planoOm]);
 
   const calcular = () => {
     if (viaturas.length === 0) {

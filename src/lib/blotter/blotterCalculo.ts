@@ -193,6 +193,23 @@ export function camposVisiveis(classesPresentes: string[]): CampoDef[] {
   return TODOS_CAMPOS.filter((c) => keys.has(c.key));
 }
 
+/**
+ * Classes sem catálogo (material avulso / "não classificado"): aqui o Valor
+ * Unit. é o próprio dado de entrada, não um override de preço oficial.
+ */
+const CLASSES_SEM_CATALOGO = new Set(["CLASSE_IV", "CLASSE_X"]);
+
+/**
+ * O Valor Unit. (e Valor Acionamento, na Classe IX) só é editável quando não
+ * existe preço de catálogo para o item — ou seja, para Classes sem catálogo
+ * (IV, X) ou quando o item selecionado é "Outro" (customizado). Para
+ * qualquer item de catálogo real, o preço é sempre o oficial, travado.
+ */
+export function valorUnitarioEditavel(classeNome: string, valores: Record<string, string>): boolean {
+  if (CLASSES_SEM_CATALOGO.has(classeNome)) return true;
+  return valores.itemEspecifico === "OUTRO";
+}
+
 export function campoAplicavel(
   campoKey: string,
   classeNome: string,
@@ -408,8 +425,8 @@ export function calcularLinhaBlotter(
           Beliche: VALORES_MANUTENCAO.BELICHE,
           Colchão: VALORES_MANUTENCAO.COLCHAO,
         };
-        const mntDiaCustomizado = numero(valores, "valorUnitario");
-        const mntDia = mntDiaCustomizado > 0 ? mntDiaCustomizado : valoresPadrao[item] || 0;
+        // Valor sempre vem do catálogo — não é editável na Entrada Rápida.
+        const mntDia = valoresPadrao[item] || 0;
         material = {
           tipo: "ESTACIONAMENTO_ALOJAMENTO" as const,
           itens: [{ tipo: item, quantidade, mntDia, periodoDias: dias }],
@@ -483,7 +500,6 @@ export function calcularLinhaBlotter(
       const tipoArmamento = valores.itemEspecifico as TipoArmamento;
       const quantidade = numero(valores, "efetivoOuQuantidade");
       const diasUso = numero(valores, "dias");
-      const custoCustomizado = numero(valores, "valorUnitario");
       if (!tipoArmamento) throw new Error("Selecione o Item Específico.");
       if (quantidade <= 0 || diasUso <= 0) throw new Error("Informe Quantidade e Dias maiores que zero.");
       const parametros = {
@@ -492,7 +508,6 @@ export function calcularLinhaBlotter(
             tipoArmamento,
             quantidade,
             diasUso,
-            custoMntDiaCustomizado: custoCustomizado > 0 ? custoCustomizado : undefined,
           },
         ],
       };
@@ -510,6 +525,8 @@ export function calcularLinhaBlotter(
       if (itemRaw === "OUTRO" && custoCustomizado <= 0) {
         throw new Error("Para 'Outro', informe o Valor Unit. (custo/hora).");
       }
+      // Override só é permitido para "Outro" — itens de catálogo usam sempre o valor padrão.
+      const custoHoraCustomizado = itemRaw === "OUTRO" && custoCustomizado > 0 ? custoCustomizado : undefined;
       if (quantidade <= 0 || diasUso <= 0 || horasPorDia <= 0) {
         throw new Error("Informe Quantidade, Dias e Horas/dia maiores que zero.");
       }
@@ -521,7 +538,7 @@ export function calcularLinhaBlotter(
             quantidade,
             diasUso,
             horasPorDia,
-            custoHoraCustomizado: custoCustomizado > 0 ? custoCustomizado : undefined,
+            custoHoraCustomizado,
           },
         ],
       };
@@ -533,7 +550,6 @@ export function calcularLinhaBlotter(
       const itemRaw = valores.itemEspecifico as TipoEquipamentoVII;
       const quantidade = numero(valores, "efetivoOuQuantidade");
       const diasUso = numero(valores, "dias");
-      const custoCustomizado = numero(valores, "valorUnitario");
       if (!itemRaw) throw new Error("Selecione o Item Específico.");
       if (quantidade <= 0 || diasUso <= 0) throw new Error("Informe Quantidade e Dias maiores que zero.");
       const parametros = {
@@ -542,7 +558,6 @@ export function calcularLinhaBlotter(
             tipoEquipamento: itemRaw,
             quantidade,
             diasUso,
-            custoMntDiaCustomizado: custoCustomizado > 0 ? custoCustomizado : undefined,
           },
         ],
       };
@@ -559,13 +574,15 @@ export function calcularLinhaBlotter(
         throw new Error("Para 'Outro', informe o Valor Unit.");
       }
       if (quantidade <= 0) throw new Error("Informe a Quantidade/Efetivo.");
+      // Override só é permitido para "Outro" — itens de catálogo usam sempre o valor padrão.
+      const custoCustomizadoFinal = itemRaw === "OUTRO" && custoCustomizado > 0 ? custoCustomizado : undefined;
       const parametros = {
         materiais: [
           {
             tipoKit: itemRaw,
             nomeCustomizado: itemRaw === "OUTRO" ? valores.nomeCustomizado : undefined,
             quantidade,
-            custoCustomizado: custoCustomizado > 0 ? custoCustomizado : undefined,
+            custoCustomizado: custoCustomizadoFinal,
           },
         ],
       };
@@ -584,16 +601,18 @@ export function calcularLinhaBlotter(
         throw new Error("Para 'Outro', informe o Valor Unit. (custo de manutenção/dia).");
       }
       if (quantidade <= 0 || diasUso <= 0) throw new Error("Informe Quantidade e Dias maiores que zero.");
+      // Override só é permitido para "Outro" — itens de catálogo usam sempre o valor padrão.
+      const ehOutro = itemRaw === "OUTRO";
       const parametros = {
         viaturas: [
           {
             tipoViatura: itemRaw,
-            nomeCustomizado: itemRaw === "OUTRO" ? valores.nomeCustomizado : undefined,
-            grupoCustomizado: itemRaw === "OUTRO" ? (valores.grupoCustomizado as GrupoViatura) : undefined,
+            nomeCustomizado: ehOutro ? valores.nomeCustomizado : undefined,
+            grupoCustomizado: ehOutro ? (valores.grupoCustomizado as GrupoViatura) : undefined,
             quantidade,
             diasUso,
-            custoMntDiaCustomizado: custoCustomizado > 0 ? custoCustomizado : undefined,
-            valorAcionamentoCustomizado: valorAcionamentoCustomizado > 0 ? valorAcionamentoCustomizado : undefined,
+            custoMntDiaCustomizado: ehOutro && custoCustomizado > 0 ? custoCustomizado : undefined,
+            valorAcionamentoCustomizado: ehOutro && valorAcionamentoCustomizado > 0 ? valorAcionamentoCustomizado : undefined,
           },
         ],
       };

@@ -7,7 +7,7 @@ export const STATUS_PLANO_LABELS: Record<string, string> = {
   RASCUNHO: "Não enviado",
   EM_ANALISE: "Aguardando",
   APROVADO: "Autorizado",
-  REPROVADO: "Reprovado",
+  REPROVADO: "Pendente de Correção",
 };
 
 export function getStatusPlanoLabel(status: string): string {

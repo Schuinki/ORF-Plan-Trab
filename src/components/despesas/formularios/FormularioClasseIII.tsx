@@ -146,7 +146,7 @@ export function FormularioClasseIII({
 
   useEffect(() => {
     calcular();
-  }, [itens, precoCombustivelCustomizado, usarPrecoCustomizado, estadoSelecionado, precosAPI]);
+  }, [itens, precoCombustivelCustomizado, usarPrecoCustomizado, estadoSelecionado, precosAPI, planoOm]);
 
   // Mapear naturezas selecionadas para códigos
   const getNaturezasCodigos = () => {

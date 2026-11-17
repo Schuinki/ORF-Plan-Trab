@@ -443,6 +443,21 @@ export function listarTodasViaturas() {
 }
 
 /**
+ * Aplica overrides de preço (vindos de Configurações > Preços) sobre a tabela
+ * VIATURAS em memória. Chaves desconhecidas são ignoradas.
+ */
+export function aplicarOverridesViaturas(
+  overrides: Record<string, Partial<Pick<ViaturaInfo, "custoMntDia" | "valorAcionamento">>>
+): void {
+  for (const [chave, valores] of Object.entries(overrides)) {
+    const viatura = (VIATURAS as Record<string, ViaturaInfo>)[chave];
+    if (viatura) {
+      Object.assign(viatura, valores);
+    }
+  }
+}
+
+/**
  * Calcula o custo de manutenção de uma viatura
  * Fórmula: (n° de dias × valor diário de manutenção) + (nº de ciclos de 30 dias × valor de acionamento)
  */

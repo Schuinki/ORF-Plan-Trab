@@ -1,8 +1,25 @@
 import { PrismaClient, TipoOM } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import omsData from "./oms.json";
+import { SEED_RASCUNHOS_DESPESA_OPERACIONAL } from "../src/lib/configuracoes/rascunhoDespesaOperacional";
 
 const prisma = new PrismaClient();
+
+// Rascunhos iniciais de Despesa Operacional (pré-preenchimento configurável
+// em Configurações > Despesa Operacional). Usa upsert para ser seguro em
+// reinstalações/re-seed de uma base já existente.
+async function seedRascunhosDespesaOperacional() {
+  for (const rascunho of SEED_RASCUNHOS_DESPESA_OPERACIONAL) {
+    await prisma.rascunhoDespesaOperacional.upsert({
+      where: { gnd_titulo: { gnd: rascunho.gnd, titulo: rascunho.titulo } },
+      update: {},
+      create: rascunho,
+    });
+  }
+  console.log(
+    `  ✓ ${SEED_RASCUNHOS_DESPESA_OPERACIONAL.length} rascunhos de despesa operacional criados`
+  );
+}
 
 // Função para determinar o tipo de OM baseado no nome
 function determinarTipoOM(nome: string, tipoRamo?: string): TipoOM {
@@ -12,28 +29,28 @@ function determinarTipoOM(nome: string, tipoRamo?: string): TipoOM {
   if (tipoRamo) {
     const tipoLower = tipoRamo.toLowerCase();
     if (tipoLower.includes("região militar")) {
-      return "BRIGADA";
+      return "GRANDE_UNIDADE";
     }
     if (tipoLower.includes("brigada")) {
-      return "BRIGADA";
+      return "GRANDE_UNIDADE";
     }
     if (tipoLower.includes("grupamento")) {
-      return "GRUPAMENTO";
+      return "GRANDE_UNIDADE";
     }
   }
 
   if (nomeLower.includes("comando militar") || nome === "CMA") {
-    return "CMA";
+    return "COMANDO_MILITAR_DE_AREA";
   }
   if (nomeLower.includes("bda") || nomeLower.includes("brigada")) {
-    return "BRIGADA";
+    return "GRANDE_UNIDADE";
   }
   if (nomeLower.includes("gpt") || nomeLower.includes("grupamento")) {
-    return "GRUPAMENTO";
+    return "GRANDE_UNIDADE";
   }
   // Região Militar - só se não for outra coisa antes (como Cia C 12ª RM)
   if (nomeLower.match(/^\d+ª?\s*rm$/) || nomeLower.startsWith("cmdo")) {
-    return "BRIGADA";
+    return "GRANDE_UNIDADE";
   }
   // Batalhões e equivalentes
   if (
@@ -161,7 +178,7 @@ async function main() {
     data: {
       nome: "Comando de Operações Terrestres",
       sigla: "COTER",
-      tipo: "COTER",
+      tipo: "ORGAO_DE_DIRECAO_SETORIAL",
       codUG: "160548",
     },
   });
@@ -191,7 +208,7 @@ async function main() {
     data: {
       nome: data.comando.nome,
       sigla: "CMA",
-      tipo: "CMA",
+      tipo: "COMANDO_MILITAR_DE_AREA",
       codUG: "160016",
       omPaiId: coter.id,
     },
@@ -698,6 +715,8 @@ async function main() {
   });
 
   console.log("  ✓ Tipos de despesa criados para todas as classes");
+
+  await seedRascunhosDespesaOperacional();
 
   console.log("\n✅ Seed concluído com sucesso!\n");
   console.log("═══════════════════════════════════════════════");

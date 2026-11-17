@@ -77,7 +77,7 @@ export function FormularioClasseV({
 
   useEffect(() => {
     calcular();
-  }, [armamentos]);
+  }, [armamentos, planoOm]);
 
   const calcular = () => {
     if (armamentos.length === 0) {

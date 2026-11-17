@@ -15,6 +15,7 @@ import { gerarPdfPlanoTrabalho, OpcoesPdf } from "@/lib/pdf/gerarPdfPlanoTrabalh
 import { gerarPdfPlanoTrabalhoOperacional } from "@/lib/pdf/gerarPdfPlanoTrabalhoOperacional";
 import { ModalAssinarGovBr } from "@/components/planos/ModalAssinarGovBr";
 import { getStatusPlanoLabel } from "@/lib/statusPlano";
+import { getTipoOMLabel } from "@/lib/constants";
 
 interface OMSubordinada {
   id: string;
@@ -260,7 +261,7 @@ export function ModalOmsSubordinadas({
                             <p className="font-medium text-gray-900">
                               {om.sigla}
                             </p>
-                            <p className="text-sm text-gray-500">{om.tipo}</p>
+                            <p className="text-sm text-gray-500">{getTipoOMLabel(om.tipo)}</p>
                           </div>
                         </div>
 

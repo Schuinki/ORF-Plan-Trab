@@ -109,6 +109,21 @@ export function listarTodosEquipamentos() {
   }));
 }
 
+/**
+ * Aplica overrides de preço (vindos de Configurações > Preços) sobre a tabela
+ * EQUIPAMENTOS em memória. Chaves desconhecidas são ignoradas.
+ */
+export function aplicarOverridesEquipamentosEletronicos(
+  overrides: Record<string, Partial<Pick<EquipamentoEletronico, "custoMntDia">>>
+): void {
+  for (const [chave, valores] of Object.entries(overrides)) {
+    const equipamento = (EQUIPAMENTOS as Record<string, EquipamentoEletronico>)[chave];
+    if (equipamento) {
+      Object.assign(equipamento, valores);
+    }
+  }
+}
+
 export function calcularClasseVII(
   params: ParametrosClasseVII,
   unidade?: string,

@@ -51,7 +51,7 @@ export function FormularioClasseIV({
 
   useEffect(() => {
     calcular();
-  }, [params]);
+  }, [params, planoOm]);
 
   const calcular = () => {
     try {

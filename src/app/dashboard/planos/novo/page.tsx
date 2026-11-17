@@ -38,6 +38,18 @@ const TIPOS_PLANO = [
     descricao:
       "Para aquisição de equipamentos e material permanente ligados à operação (investimento).",
   },
+  {
+    value: "RACAO_R2",
+    label: "Ração (R-2)",
+    descricao:
+      "Para itens de ração operacional (R-2): lançamento por item e quantidade, sem rateio de valor.",
+  },
+  {
+    value: "MUNICAO",
+    label: "Munição",
+    descricao:
+      "Para itens de munição (por NEE/NSN): lançamento por item e quantidade, sem rateio de valor.",
+  },
 ];
 
 export default function NovoPlanoPage() {
@@ -88,6 +100,8 @@ export default function NovoPlanoPage() {
     LOGISTICO: "LOG",
     OPERACIONAL_GND3: "OP GND3",
     OPERACIONAL_GND4: "OP GND4",
+    RACAO_R2: "R-2",
+    MUNICAO: "MUN",
   };
 
   // Título padrão inclui a OM e o nome da operação

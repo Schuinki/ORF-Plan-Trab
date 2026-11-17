@@ -19,6 +19,7 @@ import {
   valoresPadraoParaClasse,
   opcoesItemEspecificoParaClasse,
   calcularLinhaBlotter,
+  valorUnitarioEditavel,
   type CampoDef,
   type ContextoBlotter,
 } from "@/lib/blotter/blotterCalculo";
@@ -156,8 +157,16 @@ export function ModalBlotterTabela({
         const tiposMap: Record<string, TipoLike[]> = {};
         const itensMontados: ItemOpcao[] = [];
         classesData.forEach((classe, idx) => {
-          const tipos = tiposPorClasseRes[idx];
-          tiposMap[classe.id] = tipos;
+          // CLASSE_VI: o cálculo da Entrada Rápida é sempre o mesmo catálogo
+          // de equipamentos de engenharia (geradores, embarcações, máquinas
+          // pesadas), independente do Tipo cadastrado (Fardamento, Material
+          // de Campanha, Equipamento Individual). Listar cada Tipo separado
+          // só confunde o usuário (ex.: "Material de Campanha" ao lado de
+          // "Fardamento" sem nenhuma relação real com o item escolhido
+          // depois) — por isso aqui é tratado como as demais Classes sem
+          // Tipo específico, com uma única entrada genérica.
+          const tipos = classe.nome === "CLASSE_VI" ? [] : tiposPorClasseRes[idx];
+          tiposMap[classe.id] = tiposPorClasseRes[idx];
           if (tipos.length === 0) {
             itensMontados.push({
               id: `${classe.id}:SEM_TIPO`,
@@ -221,9 +230,13 @@ export function ModalBlotterTabela({
       };
     }
     const naturezaSelecionada = naturezas.find((n) => n.id === linha.naturezaId);
+    // O carimbo ("Destinado ao X") deve refletir a OM de destino escolhida
+    // nesta linha, não a OM proprietária do Plano de Trabalho — senão fica
+    // "invertido" em relação à OM destino real quando são diferentes.
+    const omDestinoLinha = oms.find((om) => om.id === linha.omDestinoId);
     try {
       const resultado = calcularLinhaBlotter(linha.classeNome, linha.tipoNome, linha.valores, {
-        unidade: planoOm?.sigla,
+        unidade: omDestinoLinha?.sigla || planoOm?.sigla,
         nomeOperacao: operacao.nome,
         naturezasCodigos: naturezaSelecionada ? [naturezaSelecionada.codigo] : [],
         precosCombustivel,
@@ -317,7 +330,7 @@ export function ModalBlotterTabela({
 
   const handleOmDestinoChange = (rowId: string, omDestinoId: string) => {
     setLinhas((prev) =>
-      prev.map((l) => (l.rowId === rowId ? { ...l, omDestinoId, erro: undefined } : l))
+      prev.map((l) => (l.rowId === rowId ? recalcularLinha({ ...l, omDestinoId, erro: undefined }) : l))
     );
   };
 
@@ -465,6 +478,24 @@ export function ModalBlotterTabela({
               </option>
             ))}
           </select>
+        </td>
+      );
+    }
+
+    const ehValorCatalogo =
+      (campo.key === "valorUnitario" || campo.key === "valorAcionamento") &&
+      !valorUnitarioEditavel(linha.classeNome, linha.valores);
+
+    if (ehValorCatalogo) {
+      return (
+        <td key={campo.key} className="p-1.5 border-r border-gray-100 bg-gray-50">
+          <input
+            disabled
+            readOnly
+            value="Definido pelo item selecionado"
+            title="O valor vem do catálogo do item selecionado e não pode ser alterado aqui."
+            className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-sm bg-gray-100 text-gray-500 italic"
+          />
         </td>
       );
     }

@@ -71,6 +71,20 @@ export const VALORES_MANUTENCAO = {
   COLCHAO: 0.28,
 };
 
+/**
+ * Aplica overrides de preço (vindos de Configurações > Preços) sobre
+ * VALORES_MANUTENCAO em memória. Chaves desconhecidas são ignoradas.
+ */
+export function aplicarOverridesManutencaoII(
+  overrides: Record<string, { valor: number }>
+): void {
+  for (const [chave, { valor }] of Object.entries(overrides)) {
+    if (chave in VALORES_MANUTENCAO) {
+      (VALORES_MANUTENCAO as Record<string, number>)[chave] = valor;
+    }
+  }
+}
+
 export const VIDA_UTIL = {
   EQUIPAMENTO_INDIVIDUAL: 3,
   CAPACETE: 5,

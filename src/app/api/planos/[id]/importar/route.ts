@@ -45,11 +45,11 @@ export async function POST(
       );
     }
 
-    if (plano.status !== "RASCUNHO") {
+    if (plano.status !== "RASCUNHO" && plano.status !== "REPROVADO") {
       return NextResponse.json(
         {
           error:
-            "Só é possível importar despesas em planos no status Rascunho.",
+            "Só é possível importar despesas em planos no status Rascunho ou Pendente de Correção.",
         },
         { status: 403 }
       );

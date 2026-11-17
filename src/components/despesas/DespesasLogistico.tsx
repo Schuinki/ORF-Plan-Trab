@@ -1,7 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Plus, Trash2, Loader2, AlertCircle, Edit, Zap } from "lucide-react";
+import { Fragment, useState, useEffect } from "react";
+import {
+  Plus,
+  Trash2,
+  Loader2,
+  AlertCircle,
+  Edit,
+  Zap,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ModalCriarDespesa } from "./ModalCriarDespesa";
 import { ModalBlotterTabela } from "./ModalBlotterTabela";
@@ -89,6 +100,32 @@ export function DespesasLogistico({
   const [showBlotter, setShowBlotter] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [despesaToEdit, setDespesaToEdit] = useState<any | null>(null);
+  const [carimboAbertoIds, setCarimboAbertoIds] = useState<Set<string>>(new Set());
+  const [detalhesAbertoIds, setDetalhesAbertoIds] = useState<Set<string>>(new Set());
+
+  const toggleCarimbo = (id: string) => {
+    setCarimboAbertoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleDetalhes = (id: string) => {
+    setDetalhesAbertoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     carregarDespesas();
@@ -295,169 +332,203 @@ export function DespesasLogistico({
         </div>
       ) : (
         <>
-          <div className="space-y-3">
-            {despesas.map((despesa) => (
-              <div
-                key={despesa.id}
-                className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-              >
-                <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0 w-full">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-green-100 text-green-800">
-                        {getClasseNome(despesa.classe.nome)}
-                      </span>
-                      {despesa.tipo && (
-                        <span className="text-sm text-gray-600">
-                          {despesa.tipo.nome}
-                          {despesa.tipo.isCombustivel && " (Combustível)"}
-                        </span>
-                      )}
-                      {despesa.importado && (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-amber-100 text-amber-800">
-                          Importado
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">
-                          Valor Total
-                        </p>
-                        <p className="text-lg font-bold text-green-700">
-                          {formatCurrency(Number(despesa.valorCalculado))}
-                        </p>
-                      </div>
-
-                      {despesa.importado &&
-                        despesa.valorImportadoOriginal != null && (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">
-                              Valor Importado (original)
-                            </p>
-                            <p
-                              className={`text-lg font-bold ${
-                                Math.abs(
-                                  Number(despesa.valorImportadoOriginal) -
-                                    Number(despesa.valorCalculado)
-                                ) > 0.01
-                                  ? "text-amber-700"
-                                  : "text-gray-500"
-                              }`}
-                            >
-                              {formatCurrency(
-                                Number(despesa.valorImportadoOriginal)
-                              )}
-                            </p>
+          <div className="overflow-x-auto border border-gray-200 rounded-lg">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50/60">
+                  <th className="text-left p-3 font-medium text-gray-600">
+                    Item
+                  </th>
+                  <th className="text-right p-3 font-medium text-gray-600">
+                    Valor
+                  </th>
+                  <th className="p-3 text-right font-medium text-gray-600" style={{ minWidth: 130 }}>
+                    Ações
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {despesas.map((despesa) => {
+                  const carimboAberto = carimboAbertoIds.has(despesa.id);
+                  const detalhesAberto = detalhesAbertoIds.has(despesa.id);
+                  return (
+                    <Fragment key={despesa.id}>
+                      <tr className="align-top">
+                        <td className="p-3">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-green-100 text-green-800">
+                              {getClasseNome(despesa.classe.nome)}
+                            </span>
+                            {despesa.tipo && (
+                              <span className="text-xs text-gray-600">
+                                {despesa.tipo.nome}
+                                {despesa.tipo.isCombustivel && " (Combustível)"}
+                              </span>
+                            )}
+                            {despesa.importado && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-100 text-amber-800">
+                                Importado
+                              </span>
+                            )}
                           </div>
-                        )}
-
-                      {despesa.valorCombustivel !== null && (
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">
-                            Combustível
-                          </p>
-                          <p className="text-sm font-semibold text-gray-900">
-                            {Number(despesa.valorCombustivel).toLocaleString(
-                              "pt-BR",
-                              {
+                          {despesa.valorCombustivel !== null && (
+                            <p className="text-xs text-gray-500">
+                              {Number(despesa.valorCombustivel).toLocaleString("pt-BR", {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2,
-                              }
-                            )}{" "}
-                            L
+                              })}{" "}
+                              L
+                            </p>
+                          )}
+                        </td>
+                        <td className="p-3 text-right whitespace-nowrap">
+                          <p className="font-semibold text-green-700">
+                            {formatCurrency(Number(despesa.valorCalculado))}
                           </p>
-                        </div>
+                          {despesa.importado &&
+                            despesa.valorImportadoOriginal != null && (
+                              <p
+                                className={`text-xs mt-0.5 ${
+                                  Math.abs(
+                                    Number(despesa.valorImportadoOriginal) -
+                                      Number(despesa.valorCalculado)
+                                  ) > 0.01
+                                    ? "text-amber-700"
+                                    : "text-gray-500"
+                                }`}
+                                title="Valor importado (original)"
+                              >
+                                orig.: {formatCurrency(Number(despesa.valorImportadoOriginal))}
+                              </p>
+                            )}
+                        </td>
+                        <td className="p-3 text-right whitespace-nowrap">
+                          <button
+                            onClick={() => toggleCarimbo(despesa.id)}
+                            className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-md"
+                            title="Ver carimbo"
+                          >
+                            {carimboAberto ? (
+                              <EyeOff className="w-4 h-4" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => toggleDetalhes(despesa.id)}
+                            className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-md"
+                            title="Mais informações"
+                          >
+                            {detalhesAberto ? (
+                              <ChevronUp className="w-4 h-4" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
+                          </button>
+                          {canEdit && (
+                            <>
+                              <button
+                                onClick={() => handleEdit(despesa)}
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                title="Editar despesa"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(despesa.id)}
+                                disabled={deletingId === despesa.id}
+                                className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Excluir despesa"
+                              >
+                                {deletingId === despesa.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                      {carimboAberto && (
+                        <tr className="bg-gray-50">
+                          <td colSpan={3} className="p-3">
+                            <label className="block text-xs font-medium text-gray-500 mb-1">
+                              Carimbo
+                            </label>
+                            <p className="text-xs text-gray-700 whitespace-pre-wrap font-mono bg-white border border-gray-200 rounded-md p-2">
+                              {despesa.descricao}
+                            </p>
+                          </td>
+                        </tr>
                       )}
-                    </div>
-                    <div className="mb-3">
-                      <p className="text-xs text-gray-500 mb-1">
-                        Naturezas de Despesa
-                      </p>
-                      <div className="space-y-1">
-                        {despesa.despesasNaturezas.map((rateio) => (
-                          <div
-                            key={rateio.id}
-                            className="flex items-center justify-between text-xs"
-                          >
-                            <span className="text-gray-700 font-mono">
-                              {rateio.natureza.codigo} - {rateio.natureza.nome}
-                            </span>
-                            <span className="font-medium text-gray-900">
-                              {formatCurrency(
-                                (Number(rateio.percentual) / 100) *
-                                  Number(despesa.valorCalculado)
-                              )}{" "}
-                              ({Number(rateio.percentual).toFixed(2)}%)
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="mb-4">
-                      <p className="text-xs text-gray-500 mb-1">
-                        Rateio por OMs
-                      </p>
-                      <div className="space-y-1">
-                        {despesa.oms.map((rateio) => (
-                          <div
-                            key={rateio.id}
-                            className="flex items-center justify-between text-xs"
-                          >
-                            <span className="text-gray-700">
-                              {rateio.omDestino.sigla} - {rateio.omDestino.nome}
-                              {rateio.omCompradoraId !== rateio.omDestinoId && (
-                                <span className="text-gray-400">
-                                  {" "}
-                                  (compra: {rateio.omCompradora.sigla})
-                                </span>
-                              )}
-                            </span>
-                            <span className="font-medium text-gray-900">
-                              {formatCurrency(
-                                (Number(rateio.percentual) / 100) *
-                                  Number(despesa.valorCalculado)
-                              )}{" "}
-                              ({Number(rateio.percentual).toFixed(2)}%)
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-500 ">Descrição</p>
-                    <h4 className="font-medium text-gray-900 my-2">
-                      {despesa.descricao}
-                    </h4>
-                  </div>
-
-                  {canEdit && (
-                    <div className="flex items-center gap-2 ml-0 sm:ml-4 self-end sm:self-auto shrink-0">
-                      <button
-                        onClick={() => handleEdit(despesa)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                        title="Editar despesa"
-                      >
-                        <Edit className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(despesa.id)}
-                        disabled={deletingId === despesa.id}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Excluir despesa"
-                      >
-                        {deletingId === despesa.id ? (
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-5 h-5" />
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+                      {detalhesAberto && (
+                        <tr className="bg-gray-50">
+                          <td colSpan={3} className="p-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-xs font-medium text-gray-500 mb-1">
+                                  Naturezas de Despesa
+                                </p>
+                                <div className="space-y-1">
+                                  {despesa.despesasNaturezas.map((rateio) => (
+                                    <div
+                                      key={rateio.id}
+                                      className="flex items-center justify-between gap-2 text-xs"
+                                    >
+                                      <span className="text-gray-700 font-mono">
+                                        {rateio.natureza.codigo} - {rateio.natureza.nome}
+                                      </span>
+                                      <span className="font-medium text-gray-900 whitespace-nowrap">
+                                        {formatCurrency(
+                                          (Number(rateio.percentual) / 100) *
+                                            Number(despesa.valorCalculado)
+                                        )}{" "}
+                                        ({Number(rateio.percentual).toFixed(0)}%)
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-gray-500 mb-1">
+                                  Rateio por OMs
+                                </p>
+                                <div className="space-y-1">
+                                  {despesa.oms.map((rateio) => (
+                                    <div
+                                      key={rateio.id}
+                                      className="flex items-center justify-between gap-2 text-xs"
+                                    >
+                                      <span className="text-gray-700">
+                                        {rateio.omDestino.sigla}
+                                        {rateio.omCompradoraId !== rateio.omDestinoId && (
+                                          <span className="text-gray-400">
+                                            {" "}
+                                            (compra: {rateio.omCompradora.sigla})
+                                          </span>
+                                        )}
+                                      </span>
+                                      <span className="font-medium text-gray-900 whitespace-nowrap">
+                                        {formatCurrency(
+                                          (Number(rateio.percentual) / 100) *
+                                            Number(despesa.valorCalculado)
+                                        )}{" "}
+                                        ({Number(rateio.percentual).toFixed(0)}%)
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
 
           {/* Totais */}

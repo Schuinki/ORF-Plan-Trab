@@ -156,8 +156,10 @@ export async function POST(
         newNivel = nextLevel?.nivel || nivelAtual + 1;
       }
     } else {
-      // Reprovado - volta para RASCUNHO
-      newStatus = StatusPlano.RASCUNHO;
+      // Reprovado - fica "Pendente de Correção" (status REPROVADO), não
+      // volta para RASCUNHO, para que o aviso e o motivo da devolução não
+      // se percam. O responsável corrige e reenvia a partir deste status.
+      newStatus = StatusPlano.REPROVADO;
       newNivel = null;
     }
 

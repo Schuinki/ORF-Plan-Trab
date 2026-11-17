@@ -207,3 +207,18 @@ export function listarTodosKits(): {
     info,
   }));
 }
+
+/**
+ * Aplica overrides de preço (vindos de Configurações > Preços) sobre a tabela
+ * KITS_SAUDE em memória. Chaves desconhecidas são ignoradas.
+ */
+export function aplicarOverridesKitsSaude(
+  overrides: Record<string, Partial<Pick<KitInfo, "custo">>>
+): void {
+  for (const [chave, valores] of Object.entries(overrides)) {
+    const kit = (KITS_SAUDE as Record<string, KitInfo>)[chave];
+    if (kit) {
+      Object.assign(kit, valores);
+    }
+  }
+}

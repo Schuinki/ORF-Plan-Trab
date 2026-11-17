@@ -254,6 +254,7 @@ export function getEstadosDisponiveis(
 // ============================================
 
 export interface Viatura {
+  id: string; // chave estável (usada por Configurações > Preços)
   nome: string;
   tipo:
     | "VTR_ADM_PEQUENO"
@@ -272,6 +273,7 @@ export interface Viatura {
 export const VIATURAS: Viatura[] = [
   // Vtr Adm de pequeno porte
   {
+    id: "VTR_ADM_PEQUENO_GAS_ADM_PEQUENA",
     nome: "Vtr Adm Pequeno Porte",
     tipo: "VTR_ADM_PEQUENO",
     exemplo: "Adm pequena",
@@ -279,6 +281,7 @@ export const VIATURAS: Viatura[] = [
     consumoKmL: 8,
   },
   {
+    id: "VTR_ADM_PEQUENO_OD_PICKUP",
     nome: "Vtr Adm Pequeno Porte",
     tipo: "VTR_ADM_PEQUENO",
     exemplo: "Pick-up (Frontier/L200)",
@@ -286,6 +289,7 @@ export const VIATURAS: Viatura[] = [
     consumoKmL: 7,
   },
   {
+    id: "VTR_ADM_PEQUENO_OD_VAN_MICRO",
     nome: "Vtr Adm Pequeno Porte",
     tipo: "VTR_ADM_PEQUENO",
     exemplo: "Van/Micro",
@@ -295,6 +299,7 @@ export const VIATURAS: Viatura[] = [
 
   // Vtr Adm de grande porte
   {
+    id: "VTR_ADM_GRANDE_OD_CAV_MEC",
     nome: "Vtr Adm Grande Porte",
     tipo: "VTR_ADM_GRANDE",
     exemplo: "Cav Mec",
@@ -302,6 +307,7 @@ export const VIATURAS: Viatura[] = [
     consumoKmL: 1.3,
   },
   {
+    id: "VTR_ADM_GRANDE_OD_ONIBUS",
     nome: "Vtr Adm Grande Porte",
     tipo: "VTR_ADM_GRANDE",
     exemplo: "Ônibus",
@@ -311,6 +317,7 @@ export const VIATURAS: Viatura[] = [
 
   // Vtr Op
   {
+    id: "VTR_OP_LEVE_OD_MARRUA",
     nome: "Vtr Op Leve",
     tipo: "VTR_OP_LEVE",
     exemplo: "Marruá",
@@ -318,6 +325,7 @@ export const VIATURAS: Viatura[] = [
     consumoKmL: 5,
   },
   {
+    id: "VTR_OP_GRANDE_OD_5TON_MBB",
     nome: "Vtr Op Grande Porte",
     tipo: "VTR_OP_GRANDE",
     exemplo: "Vtr 5 Ton (MBB)",
@@ -327,6 +335,7 @@ export const VIATURAS: Viatura[] = [
 
   // Motocicletas
   {
+    id: "MOTOCICLETA_GAS_ATE_1000CC",
     nome: "Motocicleta",
     tipo: "MOTOCICLETA",
     exemplo: "Até 1.000 cc",
@@ -334,6 +343,7 @@ export const VIATURAS: Viatura[] = [
     consumoKmL: 15,
   },
   {
+    id: "MOTOCICLETA_GAS_ACIMA_1000CC",
     nome: "Motocicleta",
     tipo: "MOTOCICLETA",
     exemplo: "Acima de 1.000 cc",
@@ -343,6 +353,7 @@ export const VIATURAS: Viatura[] = [
 
   // Vtr Blindadas
   {
+    id: "VTR_BLD_RODAS_OD",
     nome: "Vtr Bld sobre rodas",
     tipo: "VTR_BLD_RODAS",
     exemplo: "Blindado rodas",
@@ -350,6 +361,7 @@ export const VIATURAS: Viatura[] = [
     consumoKmL: 1.5,
   },
   {
+    id: "VTR_BLD_LAGARTAS_OD",
     nome: "Vtr Bld sobre lagartas",
     tipo: "VTR_BLD_LAGARTAS",
     exemplo: "Blindado lagartas",
@@ -357,6 +369,7 @@ export const VIATURAS: Viatura[] = [
     consumoKmL: 0.5,
   },
   {
+    id: "VTR_BLD_LEVE_OD_LINCE",
     nome: "Vtr Bld Leve sobre rodas",
     tipo: "VTR_BLD_LEVE",
     exemplo: "LINCE",
@@ -370,6 +383,7 @@ export const VIATURAS: Viatura[] = [
 // ============================================
 
 export interface Equipamento {
+  id: string; // chave estável (usada por Configurações > Preços)
   nome: string;
   combustivel: TipoCombustivel;
   consumoLH: number; // litros/hora
@@ -378,6 +392,7 @@ export interface Equipamento {
 
 export const EQUIPAMENTOS: Equipamento[] = [
   {
+    id: "GERADOR_15KVA_GAS",
     nome: "Gerador até 15 kva",
     combustivel: "GAS",
     consumoLH: 1.25,
@@ -385,65 +400,77 @@ export const EQUIPAMENTOS: Equipamento[] = [
       "Nova padronização somente Ger a OD, mas ainda existem Ger a Gas",
   },
   {
+    id: "GERADOR_15KVA_OD",
     nome: "Gerador até 15 kva",
     combustivel: "OD",
     consumoLH: 4,
     observacoes: "Troca de óleo e filtro a cada 100 horas",
   },
   {
+    id: "GERADOR_50KVA_OD",
     nome: "Gerador acima de 50 kva",
     combustivel: "OD",
     consumoLH: 20,
     observacoes: "Troca de óleo e filtro a cada 100 horas",
   },
   {
+    id: "MOTOR_POPA_GAS",
     nome: "Motor de popa (horas de navegação)",
     combustivel: "GAS",
     consumoLH: 20,
     observacoes: "Inclui AQUISIÇÃO de O2T",
   },
   {
+    id: "MOTOR_POPA_2T_NAUT_GAS",
     nome: "Motor de popa 2T NAUT",
     combustivel: "GAS",
     consumoLH: 0.5,
     observacoes: "No caso de não ser possível a aquisição pela OM",
   },
   {
+    id: "EMBARCACAO_GUARDIAN_25_GAS",
     nome: "Embarcação GUARDIAN 25",
     combustivel: "GAS",
     consumoLH: 100,
   },
   {
+    id: "FERRYBOAT_OD",
     nome: "Ferryboat",
     combustivel: "OD",
     consumoLH: 100,
   },
   {
+    id: "EMBARCACAO_REGIONAL_OD",
     nome: "Embarcação Regional",
     combustivel: "OD",
     consumoLH: 50,
   },
   {
+    id: "EMPURRADORES_OD",
     nome: "Empurradores",
     combustivel: "OD",
     consumoLH: 80,
   },
   {
+    id: "EMBARCACAO_MANOBRA_OD",
     nome: "Embarcação de Manobra",
     combustivel: "OD",
     consumoLH: 30,
   },
   {
+    id: "RETROESCAVADEIRA_OD",
     nome: "Retroescavadeira",
     combustivel: "OD",
     consumoLH: 7,
   },
   {
+    id: "CARREGADEIRA_RODAS_OD",
     nome: "Carregadeira sobre rodas",
     combustivel: "OD",
     consumoLH: 16,
   },
   {
+    id: "MOTONIVELADORA_OD",
     nome: "Motoniveladora",
     combustivel: "OD",
     consumoLH: 18,
@@ -672,4 +699,69 @@ export function filtrarEquipamentosPorCombustivel(
   tipoCombustivel: TipoCombustivel
 ): Equipamento[] {
   return EQUIPAMENTOS.filter((e) => e.combustivel === tipoCombustivel);
+}
+
+// ============================================
+// OVERRIDES (Configurações > Preços)
+// ============================================
+// Todos os overrides de combustível só valem como FALLBACK: a API externa
+// (fetchPrecosCombustivel) continua tendo prioridade sempre que estiver no ar.
+
+/**
+ * Aplica overrides sobre as médias nacionais de combustível (PRECOS_COMBUSTIVEL).
+ */
+export function aplicarOverridesPrecoCombustivelNacional(
+  overrides: Record<string, { valor: number }>
+): void {
+  for (const [chave, { valor }] of Object.entries(overrides)) {
+    if (chave in PRECOS_COMBUSTIVEL) {
+      (PRECOS_COMBUSTIVEL as Record<string, number>)[chave] = valor;
+    }
+  }
+}
+
+/**
+ * Aplica overrides sobre o fallback estático por estado (PRECOS_FALLBACK).
+ * Chave esperada: `${tipo}_${estado}` em maiúsculas, ex. "GAS_SP".
+ */
+export function aplicarOverridesPrecoCombustivelFallback(
+  overrides: Record<string, { valor: number }>
+): void {
+  for (const [chave, { valor }] of Object.entries(overrides)) {
+    const [tipo, estado] = chave.split("_");
+    const tabelaTipo = (PRECOS_FALLBACK as Record<string, Record<string, number>>)[
+      tipo
+    ];
+    if (tabelaTipo && estado) {
+      tabelaTipo[estado.toLowerCase()] = valor;
+    }
+  }
+}
+
+/**
+ * Aplica overrides de consumo (km/L) sobre o array VIATURAS, casando pelo campo `id`.
+ */
+export function aplicarOverridesConsumoViaturas(
+  overrides: Record<string, { consumoKmL: number }>
+): void {
+  for (const viatura of VIATURAS) {
+    const override = overrides[viatura.id];
+    if (override) {
+      viatura.consumoKmL = override.consumoKmL;
+    }
+  }
+}
+
+/**
+ * Aplica overrides de consumo (L/h) sobre o array EQUIPAMENTOS, casando pelo campo `id`.
+ */
+export function aplicarOverridesConsumoEquipamentosCombustivel(
+  overrides: Record<string, { consumoLH: number }>
+): void {
+  for (const equipamento of EQUIPAMENTOS) {
+    const override = overrides[equipamento.id];
+    if (override) {
+      equipamento.consumoLH = override.consumoLH;
+    }
+  }
 }

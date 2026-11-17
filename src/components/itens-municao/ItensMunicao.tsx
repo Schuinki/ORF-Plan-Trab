@@ -189,59 +189,73 @@ export function ItensMunicao({
                     </span>
                   </div>
 
-                  <div className="divide-y divide-gray-100">
-                    {itensDoOm.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-4 flex items-start justify-between gap-3"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-green-100 text-green-800">
-                              {item.tipo}
-                            </span>
-                            <span className="text-xs text-gray-500 font-mono">
-                              NEE/NSN: {item.neeNsn}
-                            </span>
-                            <span className="text-sm font-semibold text-gray-900">
-                              {item.quantidade} un.
-                            </span>
-                          </div>
-                          {item.memoria && (
-                            <p className="text-xs text-gray-700 whitespace-pre-wrap">
-                              <span className="font-medium">
-                                Memória de Cálculo:
-                              </span>{" "}
-                              {item.memoria}
-                            </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50/60">
+                          <th className="text-left p-3 font-medium text-gray-600">
+                            Tipo
+                          </th>
+                          <th className="text-left p-3 font-medium text-gray-600">
+                            NEE/NSN
+                          </th>
+                          <th className="text-right p-3 font-medium text-gray-600">
+                            Quantidade
+                          </th>
+                          <th className="text-left p-3 font-medium text-gray-600">
+                            Memória de Cálculo
+                          </th>
+                          {canEdit && (
+                            <th className="p-3 w-20 text-right font-medium text-gray-600">
+                              Ações
+                            </th>
                           )}
-                        </div>
-
-                        {canEdit && (
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              onClick={() => handleEdit(item)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                              title="Editar item"
-                            >
-                              <Edit className="w-5 h-5" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(item.id)}
-                              disabled={deletingId === item.id}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Excluir item"
-                            >
-                              {deletingId === item.id ? (
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-5 h-5" />
-                              )}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {itensDoOm.map((item) => (
+                          <tr key={item.id} className="align-top">
+                            <td className="p-3">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-green-100 text-green-800">
+                                {item.tipo}
+                              </span>
+                            </td>
+                            <td className="p-3 text-xs text-gray-500 font-mono whitespace-nowrap">
+                              {item.neeNsn}
+                            </td>
+                            <td className="p-3 text-right font-semibold text-gray-900 whitespace-nowrap">
+                              {item.quantidade} un.
+                            </td>
+                            <td className="p-3 text-xs text-gray-700 whitespace-pre-wrap">
+                              {item.memoria || "—"}
+                            </td>
+                            {canEdit && (
+                              <td className="p-3 text-right whitespace-nowrap">
+                                <button
+                                  onClick={() => handleEdit(item)}
+                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                  title="Editar item"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(item.id)}
+                                  disabled={deletingId === item.id}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Excluir item"
+                                >
+                                  {deletingId === item.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                  )}
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               );

@@ -3,7 +3,33 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { LogOut, LayoutDashboard, Folder, Users, BookOpen, Menu, X } from "lucide-react";
+import {
+  LogOut,
+  LayoutDashboard,
+  Folder,
+  Users,
+  BookOpen,
+  Menu,
+  X,
+  Settings,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
+import { hidratarPrecosGlobais } from "@/lib/configuracoes/hidratarPrecos";
+
+interface ItemNavegacaoLink {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+interface ItemNavegacaoGrupo {
+  name: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children: { name: string; href: string }[];
+}
+
+type ItemNavegacao = ItemNavegacaoLink | ItemNavegacaoGrupo;
 
 interface User {
   id: string;
@@ -27,9 +53,11 @@ export default function DashboardLayout({
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [configAberto, setConfigAberto] = useState(false);
 
   useEffect(() => {
     fetchUser();
+    hidratarPrecosGlobais();
   }, []);
 
   // Fecha a gaveta ao navegar (mobile)
@@ -81,7 +109,7 @@ export default function DashboardLayout({
     return null;
   }
 
-  const navigation = [
+  const navigation: ItemNavegacao[] = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Operações", href: "/dashboard/operacoes", icon: Folder },
     { name: "Consulta", href: "/dashboard/consulta", icon: BookOpen },
@@ -92,6 +120,15 @@ export default function DashboardLayout({
       name: "Usuários",
       href: "/dashboard/usuarios",
       icon: Users,
+    });
+    navigation.push({
+      name: "Configurações",
+      icon: Settings,
+      children: [
+        { name: "Preços", href: "/dashboard/configuracoes/precos" },
+        { name: "Despesa Operacional", href: "/dashboard/configuracoes/despesa-operacional" },
+        { name: "Hierarquia Padrão", href: "/dashboard/configuracoes/hierarquia" },
+      ],
     });
   }
 
@@ -184,6 +221,57 @@ export default function DashboardLayout({
         <nav className="p-4 space-y-1 overflow-y-auto">
           {navigation.map((item) => {
             const Icon = item.icon;
+
+            if ("children" in item) {
+              const grupoAtivo = item.children.some((child) => pathname === child.href);
+              const expandido = configAberto || grupoAtivo;
+
+              return (
+                <div key={item.name}>
+                  <button
+                    type="button"
+                    onClick={() => setConfigAberto((v) => !v)}
+                    className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition-colors ${
+                      grupoAtivo
+                        ? "bg-military-800 text-white font-medium"
+                        : "text-military-200 hover:bg-military-800"
+                    }`}
+                  >
+                    <span className="flex items-center">
+                      <Icon className="w-5 h-5 mr-3" />
+                      {item.name}
+                    </span>
+                    {expandido ? (
+                      <ChevronDown className="w-4 h-4" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4" />
+                    )}
+                  </button>
+                  {expandido && (
+                    <div className="mt-1 ml-6 space-y-1">
+                      {item.children.map((child) => {
+                        const isActive = pathname === child.href;
+                        return (
+                          <Link
+                            key={child.name}
+                            href={child.href}
+                            onClick={() => setSidebarOpen(false)}
+                            className={`block px-4 py-2 rounded-lg text-sm transition-colors ${
+                              isActive
+                                ? "bg-military-600 text-white font-medium"
+                                : "text-military-300 hover:bg-military-800"
+                            }`}
+                          >
+                            {child.name}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             const isActive = pathname === item.href;
 
             return (

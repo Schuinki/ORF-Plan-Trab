@@ -51,10 +51,12 @@ enum TipoEvento {
 enum TipoOM {
   COMPANHIA
   BATALHAO
-  BRIGADA
-  GRUPAMENTO
-  CMA
-  COTER
+  GRANDE_UNIDADE
+  GRANDE_COMANDO
+  COMANDO_MILITAR_DE_AREA
+  ORGAO_DE_DIRECAO_SETORIAL
+  ORGAO_DE_DIRECAO_GERAL
+  OUTROS
 }
 
 enum TipoPlano {
@@ -321,12 +323,32 @@ model Operacao {
   om                         OrganizacaoMilitar @relation(fields: [omId], references: [id])
   planosTrabalho             PlanoTrabalho[]
   omsParticipantes           OperacaoOM[]
+  anexos                     AnexoOperacao[]
 
   @@index([dataFinal])
   @@index([dataInicio])
   @@index([omId])
   @@index([status])
   @@map("operacoes")
+}
+
+/** Documento assinado (PTrab ou DOR) anexado a uma Operação. Conteúdo salvo direto no banco — sem storage externo configurado no projeto. */
+model AnexoOperacao {
+  id           String   @id @default(cuid())
+  operacaoId   String   @map("operacao_id")
+  tipo         String
+  nomeArquivo  String   @map("nome_arquivo")
+  mimeType     String   @map("mime_type")
+  tamanhoBytes Int      @map("tamanho_bytes")
+  conteudo     Bytes
+  uploadedById String   @map("uploaded_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  operacao   Operacao @relation(fields: [operacaoId], references: [id], onDelete: Cascade)
+  uploadedBy User     @relation(fields: [uploadedById], references: [id])
+
+  @@index([operacaoId, tipo])
+  @@map("anexos_operacao")
 }
 
 model OperacaoOM {
@@ -453,6 +475,42 @@ model ItemMunicao {
   @@map("itens_municao")
 }
 
+/** Override de preço/custo de um item de catálogo logístico (armamento, viatura, kit de saúde, etc). Ausência de linha = usa o valor padrão hardcoded em src/lib/calculos. */
+model ConfiguracaoPreco {
+  id        String        @id @default(cuid())
+  classe    ClasseDespesa
+  grupo     String
+  chave     String
+  nome      String
+  dados     Json
+  updatedBy String?       @map("updated_by")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  @@unique([classe, grupo, chave])
+  @@index([classe, grupo])
+  @@map("configuracoes_preco")
+}
+
+/** Rascunho/modelo de despesa operacional configurado pelo admin em Configurações. Pré-preenche o formulário de Nova Despesa Operacional (GND 3/GND 4) — o usuário pode editar livremente depois de aplicado. */
+model RascunhoDespesaOperacional {
+  id             String   @id @default(cuid())
+  gnd            String
+  titulo         String
+  objeto         String?
+  objetivo       String?
+  finalidade     String?
+  memoriaCalculo String?  @map("memoria_calculo")
+  ordem          Int      @default(0)
+  updatedBy      String?  @map("updated_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([gnd, titulo])
+  @@index([gnd])
+  @@map("rascunhos_despesa_operacional")
+}
+
 model Tipo {
   id               String    @id @default(cuid())
   nome             String
@@ -487,6 +545,7 @@ model User {
   documentosReferencia DocumentoReferencia[]
   planosTrabalho       PlanoTrabalho[]
   artigosConsulta      ArtigoConsulta[]
+  anexosOperacao       AnexoOperacao[]
   om                   OrganizacaoMilitar    @relation(fields: [omId], references: [id])
 
   @@index([email])

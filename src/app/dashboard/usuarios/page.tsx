@@ -4,7 +4,10 @@ import { useState, useEffect } from 'react';
 import { Users, UserPlus, Shield, Building2, Mail, Phone, User, Lock, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Pagination } from '@/components/ui/Pagination';
 import { SeletorOmBusca } from '@/components/operacoes/SeletorOmBusca';
+
+const ITENS_POR_PAGINA = 10;
 
 interface User {
   id: string;
@@ -47,6 +50,7 @@ export default function UsuariosPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [paginaAtual, setPaginaAtual] = useState(1);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -179,6 +183,11 @@ export default function UsuariosPage() {
       user.om.sigla.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const usuariosPaginados = filteredUsers.slice(
+    (paginaAtual - 1) * ITENS_POR_PAGINA,
+    paginaAtual * ITENS_POR_PAGINA
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -218,7 +227,10 @@ export default function UsuariosPage() {
           type="text"
           placeholder="Buscar por nome, email ou OM..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setPaginaAtual(1);
+          }}
           className="max-w-md"
         />
       </div>
@@ -230,7 +242,7 @@ export default function UsuariosPage() {
             Nenhum usuário encontrado
           </div>
         ) : (
-          filteredUsers.map((user) => (
+          usuariosPaginados.map((user) => (
             <div key={user.id} className="bg-white rounded-lg border border-olive-200 p-4">
               <div className="flex items-start gap-3 mb-3">
                 <div className="w-10 h-10 bg-military-100 rounded-full flex items-center justify-center flex-shrink-0">
@@ -280,6 +292,16 @@ export default function UsuariosPage() {
             </div>
           ))
         )}
+        {filteredUsers.length > 0 && (
+          <div className="bg-white rounded-lg border border-olive-200">
+            <Pagination
+              currentPage={paginaAtual}
+              totalItems={filteredUsers.length}
+              itemsPerPage={ITENS_POR_PAGINA}
+              onPageChange={setPaginaAtual}
+            />
+          </div>
+        )}
       </div>
 
       {/* Desktop/tablet: table */}
@@ -313,7 +335,7 @@ export default function UsuariosPage() {
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((user) => (
+                usuariosPaginados.map((user) => (
                   <tr key={user.id} className="hover:bg-olive-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-start gap-3">
@@ -377,6 +399,14 @@ export default function UsuariosPage() {
             </tbody>
           </table>
         </div>
+        {filteredUsers.length > 0 && (
+          <Pagination
+            currentPage={paginaAtual}
+            totalItems={filteredUsers.length}
+            itemsPerPage={ITENS_POR_PAGINA}
+            onPageChange={setPaginaAtual}
+          />
+        )}
       </div>
 
       {/* Create User Modal */}

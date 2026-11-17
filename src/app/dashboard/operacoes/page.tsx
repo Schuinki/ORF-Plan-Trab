@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { Pagination } from '@/components/ui/Pagination';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+
+const ITENS_POR_PAGINA = 10;
 
 interface Operacao {
   id: string;
@@ -27,6 +30,7 @@ export default function OperacoesPage() {
   const [operacoes, setOperacoes] = useState<Operacao[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [busca, setBusca] = useState('');
+  const [paginaAtual, setPaginaAtual] = useState(1);
 
   useEffect(() => {
     fetchOperacoes();
@@ -54,6 +58,11 @@ export default function OperacoesPage() {
         op.om.nome.toLowerCase().includes(termo)
     );
   }, [operacoes, busca]);
+
+  const operacoesPaginadas = operacoesFiltradas.slice(
+    (paginaAtual - 1) * ITENS_POR_PAGINA,
+    paginaAtual * ITENS_POR_PAGINA
+  );
 
   if (isLoading) {
     return (
@@ -96,7 +105,10 @@ export default function OperacoesPage() {
             <input
               type="text"
               value={busca}
-              onChange={(e) => setBusca(e.target.value)}
+              onChange={(e) => {
+                setBusca(e.target.value);
+                setPaginaAtual(1);
+              }}
               placeholder="Buscar por nome da operação ou OM..."
               className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 focus:border-transparent text-sm"
             />
@@ -112,7 +124,7 @@ export default function OperacoesPage() {
         <>
           {/* Mobile: card list */}
           <div className="sm:hidden space-y-3">
-            {operacoesFiltradas.map((operacao) => (
+            {operacoesPaginadas.map((operacao) => (
               <Link
                 key={operacao.id}
                 href={`/dashboard/operacoes/${operacao.id}`}
@@ -136,6 +148,14 @@ export default function OperacoesPage() {
                 </div>
               </Link>
             ))}
+            <div className="bg-white rounded-lg border border-gray-200">
+              <Pagination
+                currentPage={paginaAtual}
+                totalItems={operacoesFiltradas.length}
+                itemsPerPage={ITENS_POR_PAGINA}
+                onPageChange={setPaginaAtual}
+              />
+            </div>
           </div>
 
           {/* Desktop/tablet: table */}
@@ -153,7 +173,7 @@ export default function OperacoesPage() {
               </tr>
             </thead>
             <tbody>
-              {operacoesFiltradas.map((operacao) => (
+              {operacoesPaginadas.map((operacao) => (
                 <tr
                   key={operacao.id}
                   className="border-b border-gray-100 last:border-0 hover:bg-gray-50"
