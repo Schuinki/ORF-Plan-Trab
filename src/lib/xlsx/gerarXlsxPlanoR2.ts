@@ -13,6 +13,7 @@ export interface PlanoR2ParaXlsx {
   titulo: string;
   itensRacaoR2: ItemRacaoParaXlsx[];
   operacao: { nome: string };
+  om: { nome: string; sigla: string };
 }
 
 /**
@@ -36,7 +37,7 @@ export async function gerarXlsxPlanoR2(
       { header: "Memória de Cálculo", key: "memoria", width: 50 },
     ],
     {
-      omPrincipal: plano.operacao.nome,
+      omPrincipal: plano.om.nome,
       subtitulo: `PLANO DE RAÇÃO (R-2) PARA ${plano.operacao.nome}`,
       titulo: "PLANO R-2",
     }
@@ -61,6 +62,6 @@ export async function gerarXlsxPlanoR2(
 
   await baixarWorkbook(
     workbook,
-    `plano_r2_${plano.operacao.nome.replace(/\s+/g, "_")}.xlsx`
+    `plano_r2_${plano.om.sigla}_${plano.operacao.nome.replace(/\s+/g, "_")}.xlsx`
   );
 }

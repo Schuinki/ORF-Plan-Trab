@@ -75,6 +75,7 @@ export async function PATCH(
         nomeCompleto: true,
         nomeGuerra: true,
         postoGraduacao: true,
+        cargo: true,
         telefone: true,
         role: true,
         isActive: true,

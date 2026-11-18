@@ -16,6 +16,12 @@ interface ModalCriarItemMunicaoProps {
   itemToEdit?: ItemMunicao | null;
 }
 
+interface CatalogoItemMunicaoDTO {
+  id: string;
+  neeNsn: string;
+  tipo: string;
+}
+
 export function ModalCriarItemMunicao({
   isOpen,
   onClose,
@@ -32,6 +38,26 @@ export function ModalCriarItemMunicao({
   const [quantidade, setQuantidade] = useState("");
   const [memoria, setMemoria] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [catalogo, setCatalogo] = useState<CatalogoItemMunicaoDTO[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetch("/api/configuracoes/catalogo-municao")
+        .then((res) => (res.ok ? res.json() : []))
+        .then(setCatalogo)
+        .catch(() => setCatalogo([]));
+    }
+  }, [isOpen]);
+
+  const handleTipoChange = (valor: string) => {
+    setTipo(valor);
+    // Se o tipo digitado bate com um item do catálogo, preenche o NEE/NSN
+    // correspondente automaticamente (o usuário pode editar depois).
+    const doCatalogo = catalogo.find((c) => c.tipo === valor);
+    if (doCatalogo) {
+      setNeeNsn(doCatalogo.neeNsn);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -162,11 +188,17 @@ export function ModalCriarItemMunicao({
               </label>
               <input
                 type="text"
+                list="catalogo-municao-neensn"
                 value={neeNsn}
                 onChange={(e) => setNeeNsn(e.target.value)}
                 placeholder="Ex: 1305-00-000-0000"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-600 focus:border-transparent"
               />
+              <datalist id="catalogo-municao-neensn">
+                {catalogo.map((c) => (
+                  <option key={c.id} value={c.neeNsn} />
+                ))}
+              </datalist>
               {errors.neeNsn && (
                 <p className="text-sm text-red-600 mt-1">{errors.neeNsn}</p>
               )}
@@ -177,11 +209,22 @@ export function ModalCriarItemMunicao({
               </label>
               <input
                 type="text"
+                list="catalogo-municao-tipo"
                 value={tipo}
-                onChange={(e) => setTipo(e.target.value)}
+                onChange={(e) => handleTipoChange(e.target.value)}
                 placeholder="Ex: Munição 5,56mm"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-600 focus:border-transparent"
               />
+              <datalist id="catalogo-municao-tipo">
+                {catalogo.map((c) => (
+                  <option key={c.id} value={c.tipo} />
+                ))}
+              </datalist>
+              {catalogo.length > 0 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Sugestões do catálogo cadastrado em Configurações, ou informe um tipo livre.
+                </p>
+              )}
               {errors.tipo && (
                 <p className="text-sm text-red-600 mt-1">{errors.tipo}</p>
               )}

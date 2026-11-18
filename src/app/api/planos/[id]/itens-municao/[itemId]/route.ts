@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { z } from "zod";
 import { autoAdicionarParticipante } from "@/lib/services/omParticipante";
+import { canUserActOnOm } from "@/lib/validators/om-participante";
 
 const updateItemMunicaoSchema = z.object({
   omId: z.string().cuid("ID de OM inválido"),
@@ -157,6 +158,13 @@ export async function PATCH(
       return NextResponse.json(
         { error: "Usuário não encontrado" },
         { status: 404 }
+      );
+    }
+
+    if (!(await canUserActOnOm(user.role, user.omId, item.planoTrabalho.omId))) {
+      return NextResponse.json(
+        { error: "Você só pode alterar itens de Planos de Trabalho da sua OM" },
+        { status: 403 }
       );
     }
 

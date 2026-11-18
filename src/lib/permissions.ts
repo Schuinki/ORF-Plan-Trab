@@ -155,3 +155,8 @@ export function canViewAllPlanosOfOperation(
   return false;
 }
 
+// Checagem de "quem pode agir em nome de qual OM" (criação/edição de Ptrab
+// e seu conteúdo) foi movida para canUserActOnOm em
+// @/lib/validators/om-participante — ela depende da hierarquia de OMs
+// (consulta ao banco), então não pode ser uma função síncrona aqui.
+

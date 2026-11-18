@@ -13,6 +13,11 @@ import {
 import Link from "next/link";
 import { gerarPdfPlanoTrabalho, OpcoesPdf } from "@/lib/pdf/gerarPdfPlanoTrabalho";
 import { gerarPdfPlanoTrabalhoOperacional } from "@/lib/pdf/gerarPdfPlanoTrabalhoOperacional";
+import {
+  gerarPdfPlanoRacao,
+  gerarPdfPlanoMunicao,
+} from "@/lib/pdf/gerarPdfPlanoRacaoMunicao";
+import type { jsPDF } from "jspdf";
 import { ModalAssinarGovBr } from "@/components/planos/ModalAssinarGovBr";
 import { getStatusPlanoLabel } from "@/lib/statusPlano";
 import { getTipoOMLabel } from "@/lib/constants";
@@ -143,21 +148,60 @@ export function ModalOmsSubordinadas({
         (p: { tipo: string }) =>
           p.tipo === "OPERACIONAL_GND3" || p.tipo === "OPERACIONAL_GND4"
       );
+      const planosRacao = planos.filter(
+        (p: { tipo: string }) => p.tipo === "RACAO_R2"
+      );
+      const planosMunicao = planos.filter(
+        (p: { tipo: string }) => p.tipo === "MUNICAO"
+      );
+
+      // Todos os tipos vão para o MESMO PDF (uma seção por tipo) — downloads
+      // automáticos separados acabam bloqueados pelo navegador depois do
+      // primeiro arquivo.
+      let docCombinado: jsPDF | undefined;
 
       if (planosLogisticos.length > 0) {
-        await gerarPdfPlanoTrabalho(
+        docCombinado = await gerarPdfPlanoTrabalho(
           planosLogisticos,
           operacao,
           undefined,
-          opcoesAssinatura
+          opcoesAssinatura,
+          undefined,
+          docCombinado
         );
       }
       if (planosOperacionais.length > 0) {
-        await gerarPdfPlanoTrabalhoOperacional(
+        docCombinado = await gerarPdfPlanoTrabalhoOperacional(
           planosOperacionais,
           operacao,
           undefined,
-          opcoesAssinatura
+          opcoesAssinatura,
+          undefined,
+          docCombinado
+        );
+      }
+      if (planosRacao.length > 0) {
+        docCombinado = await gerarPdfPlanoRacao(
+          planosRacao,
+          operacao,
+          undefined,
+          opcoesAssinatura,
+          docCombinado
+        );
+      }
+      if (planosMunicao.length > 0) {
+        docCombinado = await gerarPdfPlanoMunicao(
+          planosMunicao,
+          operacao,
+          undefined,
+          opcoesAssinatura,
+          docCombinado
+        );
+      }
+
+      if (docCombinado) {
+        docCombinado.save(
+          `plano_trabalho_${operacao.nome.replace(/\s+/g, "_")}.pdf`
         );
       }
     } catch (err) {
@@ -288,7 +332,7 @@ export function ModalOmsSubordinadas({
                             </Link>
                           ) : canCreatePlano ? (
                             <Link
-                              href={`/dashboard/planos/novo?operacaoId=${operacaoId}&omId=${om.id}`}
+                              href={`/dashboard/planos/novo?operacaoId=${operacaoId}&omId=${om.id}&omSigla=${encodeURIComponent(om.sigla)}`}
                               onClick={onClose}
                             >
                               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-military-600 text-white hover:bg-military-700 transition-colors">

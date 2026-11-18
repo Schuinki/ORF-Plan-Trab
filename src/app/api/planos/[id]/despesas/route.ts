@@ -5,6 +5,7 @@ import { calcularDespesa } from "@/lib/calculos-despesas";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { autoAdicionarParticipante } from "@/lib/services/omParticipante";
+import { canUserActOnOm } from "@/lib/validators/om-participante";
 
 const rateioOMSchema = z.object({
   omDestinoId: z.string().cuid("ID de OM destino inválido"),
@@ -194,6 +195,15 @@ export async function POST(
       return NextResponse.json(
         { error: "Usuário não encontrado" },
         { status: 404 }
+      );
+    }
+
+    // Só a própria OM do plano, uma OM subordinada, ou SUPER_ADMIN pode
+    // lançar despesas nele.
+    if (!(await canUserActOnOm(user.role, user.omId, plano.omId))) {
+      return NextResponse.json(
+        { error: "Você só pode lançar despesas em Planos de Trabalho da sua OM" },
+        { status: 403 }
       );
     }
 

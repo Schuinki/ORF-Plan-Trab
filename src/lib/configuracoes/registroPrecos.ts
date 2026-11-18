@@ -19,12 +19,15 @@ import { EQUIPAMENTOS as EQUIPAMENTOS_VII } from "../calculos/classeVII";
 import { KITS_SAUDE } from "../calculos/classeVIII";
 import { VIATURAS as VIATURAS_IX } from "../calculos/classeIX";
 import { VALORES_MANUTENCAO } from "../calculos/classeII";
+import { VALORES_REFEICAO, CONFIG_MAX_DIAS_ETAPA } from "../constants";
 import {
   PRECOS_COMBUSTIVEL,
   PRECOS_FALLBACK,
   VIATURAS as VIATURAS_III,
   EQUIPAMENTOS as EQUIPAMENTOS_III,
+  CONFIG_FATOR_SEGURANCA_CLASSE_III,
 } from "../calculos/classeIII";
+import { CONFIG_FATOR_SEGURANCA as CONFIG_FATOR_SEGURANCA_VI } from "../calculos/classeVI";
 
 export interface CampoPrecoEditavel {
   campo: string;
@@ -122,7 +125,36 @@ function montarItensFallbackCombustivel(): ItemRegistroPreco[] {
   return itens;
 }
 
+const LABELS_VALOR_REFEICAO: Record<string, string> = {
+  QR: "QR — Quota de Ração (por etapa)",
+  QS: "QS — Quota Suplementar (por etapa)",
+};
+
 export const REGISTRO_PRECOS: GrupoRegistroPreco[] = [
+  {
+    classe: "CLASSE_I",
+    grupo: "VALOR_REFEICAO",
+    label: "Valor por Etapa de Ração (QR/QS)",
+    campos: [{ campo: "valor", label: "Valor", sufixo: "R$/etapa" }],
+    itens: Object.entries(VALORES_REFEICAO).map(([chave, valor]) => ({
+      chave,
+      nome: LABELS_VALOR_REFEICAO[chave] ?? chave,
+      valoresPadrao: { valor },
+    })),
+  },
+  {
+    classe: "CLASSE_I",
+    grupo: "MAX_DIAS_ETAPA",
+    label: "Máximo de Dias de Etapa Completa",
+    campos: [{ campo: "valor", label: "Dias", sufixo: "dias" }],
+    itens: [
+      {
+        chave: "MAX_DIAS",
+        nome: "Máximo de dias pagos como etapa completa (padrão: 8)",
+        valoresPadrao: { valor: CONFIG_MAX_DIAS_ETAPA.valor },
+      },
+    ],
+  },
   {
     classe: "CLASSE_II",
     grupo: "MANUTENCAO_II",
@@ -175,6 +207,19 @@ export const REGISTRO_PRECOS: GrupoRegistroPreco[] = [
     })),
   },
   {
+    classe: "CLASSE_III",
+    grupo: "FATOR_SEGURANCA_COMBUSTIVEL_III",
+    label: "Fator de Segurança — Combustível",
+    campos: [{ campo: "valor", label: "Fator multiplicador", sufixo: "x" }],
+    itens: [
+      {
+        chave: "COMBUSTIVEL",
+        nome: "Margem de segurança sobre o consumo calculado (padrão: 1,3 = 30%)",
+        valoresPadrao: { valor: CONFIG_FATOR_SEGURANCA_CLASSE_III.valor },
+      },
+    ],
+  },
+  {
     classe: "CLASSE_V",
     grupo: "ARMAMENTO_MANUTENCAO",
     label: "Manutenção de Armamento",
@@ -211,6 +256,19 @@ export const REGISTRO_PRECOS: GrupoRegistroPreco[] = [
         totalHora: info.totalHora,
       },
     })),
+  },
+  {
+    classe: "CLASSE_VI",
+    grupo: "FATOR_SEGURANCA_ENGENHARIA_VI",
+    label: "Fator de Segurança — Equipamentos de Engenharia",
+    campos: [{ campo: "valor", label: "Fator multiplicador", sufixo: "x" }],
+    itens: [
+      {
+        chave: "ENGENHARIA",
+        nome: "Margem de segurança sobre o custo de manutenção calculado (padrão: 1,1 = 10%)",
+        valoresPadrao: { valor: CONFIG_FATOR_SEGURANCA_VI.valor },
+      },
+    ],
   },
   {
     classe: "CLASSE_VII",

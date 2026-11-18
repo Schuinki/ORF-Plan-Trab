@@ -1,14 +1,17 @@
 /**
- * CLASSE VI — EQUIPAMENTOS DE ENGENHARIA (GND 3)
+ * CLASSE VI — MATERIAL DE ENGENHARIA E CARTOGRAFIA (GND 3)
  *
  * Cálculo baseado no custo de manutenção por hora de utilização
  * Fórmula: custo = valor_hora × n_horas × 1,10
- * (fator 1,10 = 10% adicional de segurança)
+ * (fator 1,10 = reserva de 10% sobre o valor total calculado, para
+ * atendimento de eventualidades e mudanças de escopo do trabalho —
+ * Diretriz de Prontidão Logística 2026, Apêndice 2, item 6.b.5. Não é um
+ * "fator de segurança" por item: o resultado matemático de aplicar 1,1 a
+ * cada linha e depois somar é idêntico a somar as linhas e só então
+ * aplicar 1,1 ao total.)
  *
- * A tabela contém:
- * - Peças e insumos (ND 30)
- * - Serviço de manutenção (ND 39)
- * - Total (soma das duas)
+ * A tabela de custo-hora por equipamento (peças ND 30 + manutenção ND 39)
+ * é a mesma publicada na Diretriz (item 6.b).
  */
 
 // Tipos de equipamento disponíveis
@@ -182,9 +185,23 @@ export interface ResultadoClasseVI {
 }
 
 /**
- * Fator de segurança
+ * Reserva de 10% sobre o valor total (padrão) — editável em
+ * Configurações > Preços (ver aplicarOverrideFatorSeguranca). Diretriz de
+ * Prontidão Logística 2026, Apêndice 2, item 6.b.5: "todas as planilhas
+ * deverão considerar o valor total calculado acrescido de 10% de reserva,
+ * para atendimento de eventualidades e mudanças do escopo de trabalho."
  */
-const FATOR_SEGURANCA = 1.1; // 10% adicional
+export const CONFIG_FATOR_SEGURANCA = { valor: 1.1 };
+
+/** Aplica um override da reserva vindo de Configurações > Preços. */
+export function aplicarOverrideFatorSeguranca(
+  overrides: Record<string, { valor?: number }>
+): void {
+  const valor = overrides.ENGENHARIA?.valor;
+  if (typeof valor === "number" && valor > 0) {
+    CONFIG_FATOR_SEGURANCA.valor = valor;
+  }
+}
 
 /**
  * Obtém o custo por hora efetivo de um item (customizado ou padrão)
@@ -215,7 +232,7 @@ export function getNomeEquipamento(item: ItemEquipamentoEngenharia): string {
 function calcularCustoItem(item: ItemEquipamentoEngenharia): number {
   const custoHora = getCustoHoraEfetivo(item);
   const horasTotais = item.diasUso * item.horasPorDia;
-  return item.quantidade * custoHora * horasTotais * FATOR_SEGURANCA;
+  return item.quantidade * custoHora * horasTotais * CONFIG_FATOR_SEGURANCA.valor;
 }
 
 /**
@@ -243,12 +260,12 @@ function gerarCarimbo(
     const isCustomizado = item.custoHoraCustomizado !== undefined;
 
     memoriaCalculo += `→ ${nomeEquip}\n`;
-    memoriaCalculo += `  ${item.quantidade} un × R$ ${custoHora.toFixed(2)}/h${isCustomizado ? " (customizado)" : ""} × ${item.diasUso} dias × ${item.horasPorDia}h/dia × ${FATOR_SEGURANCA.toFixed(2)}\n`;
+    memoriaCalculo += `  ${item.quantidade} un × R$ ${custoHora.toFixed(2)}/h${isCustomizado ? " (customizado)" : ""} × ${item.diasUso} dias × ${item.horasPorDia}h/dia\n`;
     memoriaCalculo += `  (Total: ${horasTotais}h)\n`;
-    memoriaCalculo += `  Subtotal: R$ ${custoItem.toFixed(2)}\n\n`;
+    memoriaCalculo += `  Subtotal (já com reserva): R$ ${custoItem.toFixed(2)}\n\n`;
   }
 
-  memoriaCalculo += `Fator de Segurança: ${FATOR_SEGURANCA.toFixed(2)} (10%)`;
+  memoriaCalculo += `Reserva de eventualidades (Diretriz de Prontidão Logística 2026, Ap. 2, 6.b.5): ${((CONFIG_FATOR_SEGURANCA.valor - 1) * 100).toFixed(0)}% sobre o valor total calculado`;
 
   // Usar naturezas dinâmicas ou fallback para padrão
   const naturezasTexto = naturezas && naturezas.length > 0

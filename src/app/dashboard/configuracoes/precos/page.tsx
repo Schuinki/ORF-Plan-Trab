@@ -19,6 +19,7 @@ interface ConfiguracaoPrecoDTO {
 }
 
 const LABEL_CLASSE: Record<string, string> = {
+  CLASSE_I: "Classe I — Subsistência / Ração",
   CLASSE_II: "Classe II — Fardamento / Equipamento",
   CLASSE_III: "Classe III — Combustível",
   CLASSE_V: "Classe V — Armamento",
@@ -29,6 +30,7 @@ const LABEL_CLASSE: Record<string, string> = {
 };
 
 const ORDEM_CLASSES = [
+  "CLASSE_I",
   "CLASSE_II",
   "CLASSE_III",
   "CLASSE_V",

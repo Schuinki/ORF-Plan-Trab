@@ -8,6 +8,7 @@ import {
   ItemEquipamentoEngenharia,
   TipoEquipamento,
   EQUIPAMENTOS,
+  CONFIG_FATOR_SEGURANCA,
   calcularClasseVI,
   listarTodosEquipamentos,
   getCustoHoraEfetivo,
@@ -30,8 +31,6 @@ interface FormularioClasseVIProps {
   naturezas: NaturezaSelect[];
   rateioNaturezas: RateioNatureza[];
 }
-
-const FATOR_SEGURANCA = 1.1;
 
 export function FormularioClasseVI({
   value,
@@ -202,7 +201,7 @@ export function FormularioClasseVI({
   const calcularCustoItem = (item: ItemEquipamentoEngenharia): number => {
     const custoHoraItem = getCustoHoraEfetivo(item);
     const horasTotais = item.diasUso * item.horasPorDia;
-    return item.quantidade * custoHoraItem * horasTotais * FATOR_SEGURANCA;
+    return item.quantidade * custoHoraItem * horasTotais * CONFIG_FATOR_SEGURANCA.valor;
   };
 
   const handleCarimboChange = (novoCarimbo: string) => {
@@ -228,14 +227,16 @@ export function FormularioClasseVI({
 
   return (
     <div className="space-y-4">
-      {/* Informação sobre fator de segurança */}
+      {/* Informação sobre reserva de eventualidades */}
       <div className="bg-amber-50 border border-amber-300 rounded-md p-3 flex items-start gap-2">
         <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
         <div className="text-sm text-amber-800">
-          <p className="font-semibold">Fator de Segurança Obrigatório</p>
+          <p className="font-semibold">Reserva de Eventualidades (obrigatória)</p>
           <p className="mt-1">
-            Todo cálculo aplica automaticamente o fator de segurança de{" "}
-            {FATOR_SEGURANCA} (10% adicional).
+            O total calculado inclui automaticamente a reserva de{" "}
+            {((CONFIG_FATOR_SEGURANCA.valor - 1) * 100).toFixed(0)}% exigida
+            pela Diretriz de Prontidão Logística 2026 (Apêndice 2, item 6.b.5)
+            para atendimento de eventualidades e mudanças de escopo.
           </p>
         </div>
       </div>
@@ -424,7 +425,7 @@ export function FormularioClasseVI({
             <p>
               <strong>Custo estimado:</strong> {quantidade} × R${" "}
               {custoHora.toFixed(2)}/h × {diasUso} dias × {horasPorDia}h/dia ×{" "}
-              {FATOR_SEGURANCA} ={" "}
+              {CONFIG_FATOR_SEGURANCA.valor} ={" "}
               <span className="font-semibold text-green-700">
                 R${" "}
                 {(
@@ -432,7 +433,7 @@ export function FormularioClasseVI({
                   custoHora *
                   diasUso *
                   horasPorDia *
-                  FATOR_SEGURANCA
+                  CONFIG_FATOR_SEGURANCA.valor
                 ).toFixed(2)}
               </span>
               {equipamentoSelecionadoInfo &&
@@ -505,7 +506,7 @@ export function FormularioClasseVI({
                       </p>
                       <p>
                         R$ {custoHoraItem.toFixed(2)}/h × {item.diasUso} dias ×{" "}
-                        {item.horasPorDia}h/dia × {FATOR_SEGURANCA}
+                        {item.horasPorDia}h/dia × {CONFIG_FATOR_SEGURANCA.valor}
                       </p>
                       <p className="text-gray-500">(Total: {horasTotais}h)</p>
                     </div>

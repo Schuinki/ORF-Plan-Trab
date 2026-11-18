@@ -32,6 +32,7 @@ export function ModalImportarPTrab({
   const [erro, setErro] = useState("");
   const [resultado, setResultado] = useState<{
     linhasImportadas: number;
+    planosGerados: number;
     avisos: string[];
   } | null>(null);
 
@@ -58,7 +59,7 @@ export function ModalImportarPTrab({
       return;
     }
     if (!file) {
-      setErro("Selecione um arquivo .xlsx ou .pdf.");
+      setErro("Selecione um arquivo .xlsx, .xls, .ods ou .pdf.");
       return;
     }
 
@@ -83,6 +84,7 @@ export function ModalImportarPTrab({
 
       setResultado({
         linhasImportadas: data.linhasImportadas,
+        planosGerados: data.planosGerados || 1,
         avisos: data.avisos || [],
       });
       onImportado();
@@ -118,8 +120,10 @@ export function ModalImportarPTrab({
             {resultado ? (
               <div className="space-y-3">
                 <p className="text-sm text-gray-700">
-                  Plano importado com sucesso: {resultado.linhasImportadas}{" "}
-                  despesa(s) reconhecida(s).
+                  {resultado.planosGerados > 1
+                    ? `${resultado.planosGerados} Planos de Trabalho criados (um por OM identificada no arquivo)`
+                    : "1 Plano de Trabalho criado"}
+                  : {resultado.linhasImportadas} despesa(s) reconhecida(s).
                 </p>
                 {resultado.avisos.length > 0 && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1 max-h-40 overflow-y-auto">
@@ -138,9 +142,11 @@ export function ModalImportarPTrab({
             ) : (
               <>
                 <p className="text-sm text-gray-500">
-                  Importa um P Trab inteiro (modelo padrão, em .xlsx ou .pdf)
-                  direto para esta operação — não é necessário criar o plano
-                  antes.
+                  Importa um P Trab inteiro (modelo padrão, em .xlsx, .xls,
+                  .ods ou .pdf) direto para esta operação — não é necessário
+                  criar o plano antes. Um arquivo consolidado com várias OMs
+                  é automaticamente separado: cada OM identificada no
+                  arquivo ganha o seu próprio Plano de Trabalho.
                 </p>
 
                 <div>
@@ -187,18 +193,19 @@ export function ModalImportarPTrab({
                     ))}
                   </select>
                   <p className="text-xs text-gray-400 mt-1">
-                    OM padrão para as despesas; linhas que citarem outra OM
-                    participante são associadas automaticamente a ela.
+                    OM usada quando uma linha do arquivo não citar nenhuma OM
+                    participante reconhecível; linhas que citarem outra OM
+                    participante geram o Plano de Trabalho dela automaticamente.
                   </p>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Arquivo (.xlsx ou .pdf)
+                    Arquivo (.xlsx, .xls, .ods ou .pdf)
                   </label>
                   <input
                     type="file"
-                    accept=".pdf,.xlsx"
+                    accept=".pdf,.xlsx,.xls,.ods"
                     onChange={(e) => setFile(e.target.files?.[0] || null)}
                     className="w-full text-sm text-gray-700"
                   />

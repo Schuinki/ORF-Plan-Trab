@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Pagination } from '@/components/ui/Pagination';
 import { SeletorOmBusca } from '@/components/operacoes/SeletorOmBusca';
+import { CARGOS_USUARIO } from '@/lib/constants';
 
 const ITENS_POR_PAGINA = 10;
 
@@ -15,6 +16,7 @@ interface User {
   nomeCompleto: string;
   nomeGuerra: string | null;
   postoGraduacao: string;
+  cargo: string | null;
   telefone: string | null;
   role: string;
   isActive: boolean;
@@ -58,6 +60,7 @@ export default function UsuariosPage() {
     nomeCompleto: '',
     nomeGuerra: '',
     postoGraduacao: '',
+    cargo: '',
     telefone: '',
     role: 'INTEGRANTE',
     omId: '',
@@ -109,6 +112,7 @@ export default function UsuariosPage() {
         body: JSON.stringify({
           ...formData,
           nomeGuerra: formData.nomeGuerra || undefined,
+          cargo: formData.cargo || undefined,
           telefone: formData.telefone || undefined,
         }),
       });
@@ -137,6 +141,7 @@ export default function UsuariosPage() {
         nomeCompleto: '',
         nomeGuerra: '',
         postoGraduacao: '',
+        cargo: '',
         telefone: '',
         role: 'INTEGRANTE',
         omId: '',
@@ -278,6 +283,7 @@ export default function UsuariosPage() {
                     <div className="text-xs text-olive-600 flex items-center gap-1">
                       <Shield className="w-3 h-3" />
                       {ROLE_LABELS[user.role] || user.role}
+                      {user.cargo ? ` · ${user.cargo}` : ''}
                     </div>
                   </div>
                 </div>
@@ -368,9 +374,14 @@ export default function UsuariosPage() {
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <Shield className="w-4 h-4 text-military-600" />
-                        <span className="text-sm font-medium text-military-800">
-                          {ROLE_LABELS[user.role] || user.role}
-                        </span>
+                        <div>
+                          <div className="text-sm font-medium text-military-800">
+                            {ROLE_LABELS[user.role] || user.role}
+                          </div>
+                          {user.cargo && (
+                            <div className="text-xs text-olive-600">{user.cargo}</div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -511,6 +522,27 @@ export default function UsuariosPage() {
                     <p className="text-red-600 text-sm mt-1">{formErrors.postoGraduacao}</p>
                   )}
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-military-900 mb-1">
+                  Cargo/Função
+                </label>
+                <select
+                  value={formData.cargo}
+                  onChange={(e) => setFormData({ ...formData, cargo: e.target.value })}
+                  className="w-full px-4 py-2 border border-olive-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 focus:border-transparent bg-white"
+                >
+                  <option value="">Não informado</option>
+                  {CARGOS_USUARIO.map((cargo) => (
+                    <option key={cargo} value={cargo}>
+                      {cargo}
+                    </option>
+                  ))}
+                </select>
+                {formErrors.cargo && (
+                  <p className="text-red-600 text-sm mt-1">{formErrors.cargo}</p>
+                )}
               </div>
 
               <div>

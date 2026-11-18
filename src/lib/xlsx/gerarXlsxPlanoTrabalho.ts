@@ -10,6 +10,10 @@ import { baixarWorkbook, sanitizarNomeAba } from "@/lib/xlsx/download";
 import { adicionarLinhaDados } from "@/lib/xlsx/dadosBrutos";
 import { agruparConsolidado } from "@/lib/consolidado/construirConsolidado";
 import { criarAbaComCabecalho } from "@/lib/xlsx/escreverCabecalhoXlsx";
+import {
+  montarDadosOperacaoCabecalho,
+  OperacaoParaCabecalho,
+} from "@/lib/documentos/montarDadosCabecalho";
 
 const SUBTITULO = (operacaoNome: string) =>
   `PLANO DE TRABALHO LOGÍSTICO DE SOLICITAÇÃO DE RECURSOS ORÇAMENTÁRIOS E FINANCEIROS PARA ${operacaoNome}`;
@@ -148,17 +152,24 @@ export function adicionarAbaPlanoLogistico(
 export function adicionarAbasPorOM(
   workbook: Workbook,
   planos: PlanoComRelacoes[],
-  operacaoNome: string,
+  operacao: string | OperacaoParaCabecalho,
   omsIncluidas?: string[]
 ): number {
+  const operacaoNome = typeof operacao === "string" ? operacao : operacao.nome;
+  const dadosOperacao =
+    typeof operacao === "string" ? undefined : montarDadosOperacaoCabecalho(operacao);
+
   planos.forEach((plano) => registrarDadosBrutos(workbook, plano));
 
   const todasDespesas = planos.flatMap((plano) =>
-    processarDespesas(plano.despesas as unknown as DespesaWithRelations[])
+    processarDespesas(plano.despesas as unknown as DespesaWithRelations[], {
+      nome: plano.om.nome,
+      codUG: plano.om.codUG,
+    })
   );
 
   const { porOM } = agruparConsolidado(todasDespesas, {
-    chaveAgrupamento: "destino",
+    chaveAgrupamento: "owner",
     omsIncluidas,
   });
 
@@ -173,6 +184,7 @@ export function adicionarAbasPorOM(
         omPrincipal: grupo.omNome,
         subtitulo: SUBTITULO(operacaoNome),
         titulo: TITULO,
+        dadosOperacao,
       }
     );
 
@@ -208,10 +220,14 @@ export async function gerarXlsxPlanoTrabalho(
   workbook.creator = "SisPTrab";
   workbook.created = new Date();
 
-  adicionarAbasPorOM(workbook, planosArray, operacao.nome, omsIncluidas);
+  adicionarAbasPorOM(workbook, planosArray, operacao, omsIncluidas);
 
+  const siglaArquivo =
+    planosArray.length > 1
+      ? "Consolidado"
+      : planosArray[0].om.sigla.replace(/\s+/g, "_");
   await baixarWorkbook(
     workbook,
-    `plano_trabalho_${operacao.nome.replace(/\s+/g, "_")}.xlsx`
+    `plano_trabalho_${siglaArquivo}_${operacao.nome.replace(/\s+/g, "_")}.xlsx`
   );
 }

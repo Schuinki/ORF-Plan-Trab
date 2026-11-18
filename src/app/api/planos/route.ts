@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { canCreatePlanoTrabalho } from "@/lib/permissions";
 import {
-  canCreatePlanoTrabalho,
-} from "@/lib/permissions";
-import { getTodasOmsSubordinadas } from "@/lib/validators/om-participante";
+  getTodasOmsSubordinadas,
+  canUserActOnOm,
+} from "@/lib/validators/om-participante";
 import { z } from "zod";
 import { StatusPlano, TipoEvento, TipoPlano } from "@prisma/client";
 
@@ -167,10 +168,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Qualquer usuário autenticado com papel permitido (checado acima por
-    // canCreatePlanoTrabalho) pode criar um plano para qualquer OM
-    // participante da operação, independentemente da hierarquia de OM.
+    // Cada OM só pode criar Ptrab em nome de si mesma ou de uma OM
+    // subordinada na hierarquia (ex.: S4 de um Comando lançando o Ptrab de
+    // uma unidade subordinada sem acesso próprio ao sistema). Apenas
+    // SUPER_ADMIN pode criar em nome de qualquer outra OM participante.
     const omAlvo = data.omId || user.omId;
+    if (!(await canUserActOnOm(user.role, user.omId, omAlvo))) {
+      return NextResponse.json(
+        { error: "Você só pode criar Planos de Trabalho em nome da sua OM ou de uma OM subordinada" },
+        { status: 403 }
+      );
+    }
+
     const omParticipa = operacao.omsParticipantes.some(
       (p) => p.omId === omAlvo
     );

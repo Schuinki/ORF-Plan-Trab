@@ -12,13 +12,21 @@
 
 import { aplicarOverridesManutencaoII } from "../calculos/classeII";
 import {
+  aplicarOverridesValoresRefeicao,
+  aplicarOverrideMaxDiasEtapa,
+} from "../constants";
+import {
   aplicarOverridesPrecoCombustivelNacional,
   aplicarOverridesPrecoCombustivelFallback,
   aplicarOverridesConsumoViaturas,
   aplicarOverridesConsumoEquipamentosCombustivel,
+  aplicarOverrideFatorSegurancaClasseIII,
 } from "../calculos/classeIII";
 import { aplicarOverridesArmamentos } from "../calculos/classeV";
-import { aplicarOverridesEquipamentosEngenharia } from "../calculos/classeVI";
+import {
+  aplicarOverridesEquipamentosEngenharia,
+  aplicarOverrideFatorSeguranca as aplicarOverrideFatorSegurancaVI,
+} from "../calculos/classeVI";
 import { aplicarOverridesEquipamentosEletronicos } from "../calculos/classeVII";
 import { aplicarOverridesKitsSaude } from "../calculos/classeVIII";
 import { aplicarOverridesViaturas } from "../calculos/classeIX";
@@ -34,6 +42,8 @@ interface ConfiguracaoPrecoDTO {
 type AplicadorPorGrupo = (overrides: Record<string, any>) => void;
 
 const APLICADORES: Record<string, AplicadorPorGrupo> = {
+  VALOR_REFEICAO: aplicarOverridesValoresRefeicao,
+  MAX_DIAS_ETAPA: aplicarOverrideMaxDiasEtapa,
   MANUTENCAO_II: aplicarOverridesManutencaoII,
   COMBUSTIVEL_MEDIA_NACIONAL: aplicarOverridesPrecoCombustivelNacional,
   COMBUSTIVEL_FALLBACK_ESTADO: aplicarOverridesPrecoCombustivelFallback,
@@ -41,6 +51,8 @@ const APLICADORES: Record<string, AplicadorPorGrupo> = {
   COMBUSTIVEL_CONSUMO_EQUIPAMENTO: aplicarOverridesConsumoEquipamentosCombustivel,
   ARMAMENTO_MANUTENCAO: aplicarOverridesArmamentos,
   EQUIPAMENTO_ENGENHARIA_MANUTENCAO: aplicarOverridesEquipamentosEngenharia,
+  FATOR_SEGURANCA_COMBUSTIVEL_III: aplicarOverrideFatorSegurancaClasseIII,
+  FATOR_SEGURANCA_ENGENHARIA_VI: aplicarOverrideFatorSegurancaVI,
   EQUIPAMENTO_ELETRONICO_MANUTENCAO: aplicarOverridesEquipamentosEletronicos,
   KIT_SAUDE: aplicarOverridesKitsSaude,
   VIATURA_MANUTENCAO: aplicarOverridesViaturas,

@@ -20,18 +20,23 @@ export function escreverCabecalhoXlsx(
 ): number {
   const colFinal = letraColuna(numColunas);
   const linhaInicio = 1;
-  const linhaFim = 4;
+  const linhas = montarLinhasCabecalho(dados);
+  // 4 linhas de altura para o cabeçalho "oficial" básico (Ministério/
+  // Exército/OM/subtítulo/título) + 1 linha extra de altura para cada
+  // linha adicional dos dados da operação (período, efetivo etc.), senão
+  // o texto fica cortado/incompleto na célula mesclada.
+  const linhaFim = Math.max(4, linhaInicio + linhas.length - 1);
 
   sheet.mergeCells(`A${linhaInicio}:${colFinal}${linhaFim}`);
   const cell = sheet.getCell(`A${linhaInicio}`);
-  cell.value = montarLinhasCabecalho(dados).join("\n");
+  cell.value = linhas.join("\n");
   cell.font = { bold: true, size: 11 };
   cell.alignment = {
     horizontal: "center",
     vertical: "middle",
     wrapText: true,
   };
-  sheet.getRow(linhaInicio).height = 80;
+  sheet.getRow(linhaInicio).height = Math.max(80, linhas.length * 16);
 
   return linhaFim + 2; // uma linha em branco antes da tabela
 }

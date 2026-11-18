@@ -5,6 +5,7 @@ import { canCreatePlanoTrabalho } from "@/lib/permissions";
 import { TipoPlano, StatusPlano, TipoEvento, Prisma } from "@prisma/client";
 import {
   parsePTrabXlsx,
+  parsePTrabSheetJs,
   parsePTrabPdf,
   type LinhaImportada,
 } from "@/lib/importacao/parserPTrabModelo";
@@ -100,11 +101,18 @@ export async function POST(
     let avisos: string[];
     if (nomeArquivo.endsWith(".xlsx")) {
       ({ linhas, avisos } = await parsePTrabXlsx(buffer));
+    } else if (nomeArquivo.endsWith(".ods")) {
+      ({ linhas, avisos } = await parsePTrabSheetJs(buffer, "ods"));
+    } else if (nomeArquivo.endsWith(".xls")) {
+      ({ linhas, avisos } = await parsePTrabSheetJs(buffer, "xls"));
     } else if (nomeArquivo.endsWith(".pdf")) {
       ({ linhas, avisos } = await parsePTrabPdf(buffer));
     } else {
       return NextResponse.json(
-        { error: "Formato de arquivo não suportado. Envie .xlsx ou .pdf." },
+        {
+          error:
+            "Formato de arquivo não suportado. Envie .xlsx, .xls, .ods ou .pdf.",
+        },
         { status: 400 }
       );
     }
@@ -155,30 +163,55 @@ export async function POST(
     const gndEsperadoOperacional =
       tipo === TipoPlano.OPERACIONAL_GND4 ? "GND 4" : "GND 3";
 
-    const lastVersion = await prisma.planoTrabalho.findFirst({
-      where: { operacaoId },
-      orderBy: { versao: "desc" },
-      select: { versao: true },
-    });
-    const nextVersion = lastVersion ? lastVersion.versao + 1 : 1;
-
     const dataFormatada = new Date().toLocaleDateString("pt-BR");
-    const titulo = `P Trab Importado - ${origem} (${dataFormatada})`;
+    const participantesPorOmId = new Map(
+      operacao.omsParticipantes.map((p) => [p.omId, p.om])
+    );
 
     const resultado = await prisma.$transaction(async (tx) => {
-      const plano = await tx.planoTrabalho.create({
-        data: {
-          titulo,
-          versao: nextVersion,
-          operacaoId,
-          omId: omIdPadrao,
-          responsavelId: user.id,
-          status: StatusPlano.RASCUNHO,
-          tipo: tipo as TipoPlano,
-          importado: true,
-          origemImportacao: origem,
-        },
-      });
+      // Um arquivo consolidado pode trazer linhas de várias OMs diferentes
+      // (coluna "OM (UGE)" de cada linha) — em vez de jogar tudo num único
+      // Plano da OM escolhida no diálogo, cada OM detectada ganha o seu
+      // próprio Plano de Trabalho, criado sob demanda conforme as linhas
+      // vão aparecendo. Linhas cuja OM não bate com nenhuma participante
+      // caem na OM escolhida no diálogo (omIdPadrao), como antes.
+      const planosPorOm = new Map<string, { id: string; titulo: string }>();
+      const responsavelId = user.id;
+
+      async function getOuCriarPlano(
+        omId: string
+      ): Promise<{ id: string; titulo: string }> {
+        const existente = planosPorOm.get(omId);
+        if (existente) return existente;
+
+        const omSigla = participantesPorOmId.get(omId)?.sigla;
+        const titulo = omSigla
+          ? `P Trab Importado - ${origem} (${omSigla}) (${dataFormatada})`
+          : `P Trab Importado - ${origem} (${dataFormatada})`;
+
+        const lastVersion = await tx.planoTrabalho.findFirst({
+          where: { operacaoId, omId, tipo: tipo as TipoPlano },
+          orderBy: { versao: "desc" },
+          select: { versao: true },
+        });
+        const versao = lastVersion ? lastVersion.versao + 1 : 1;
+
+        const plano = await tx.planoTrabalho.create({
+          data: {
+            titulo,
+            versao,
+            operacaoId,
+            omId,
+            responsavelId,
+            status: StatusPlano.RASCUNHO,
+            tipo: tipo as TipoPlano,
+            importado: true,
+            origemImportacao: origem,
+          },
+        });
+        planosPorOm.set(omId, plano);
+        return plano;
+      }
 
       let classeXId: string | null = null;
       // Classes por nome (ex.: "CLASSE_III"), com as NDs que cada uma aceita
@@ -211,6 +244,7 @@ export async function POST(
         const omAlvo =
           acharOmPorTexto(linha.omTexto, operacao.omsParticipantes) ||
           omIdPadrao;
+        const plano = await getOuCriarPlano(omAlvo);
 
         const entradasNd = Object.entries(linha.valoresPorNd).filter(
           ([codigo]) =>
@@ -306,42 +340,51 @@ export async function POST(
         }
       }
 
-      if (tipo === TipoPlano.LOGISTICO) {
-        const total = await tx.despesa.aggregate({
-          where: { planoTrabalhoId: plano.id },
-          _sum: { valorCalculado: true },
-        });
-        await tx.planoTrabalho.update({
-          where: { id: plano.id },
-          data: { valorTotalDespesas: total._sum.valorCalculado || 0 },
-        });
-      } else {
-        const total = await tx.despesaOperacionalNatureza.aggregate({
-          where: { despesaOperacional: { planoTrabalhoId: plano.id } },
-          _sum: { valor: true },
-        });
-        await tx.planoTrabalho.update({
-          where: { id: plano.id },
-          data: { valorTotalDespesas: total._sum.valor || 0 },
+      // Um import consolidado pode ter criado mais de um Plano (um por OM
+      // detectada) — totaliza e audita cada um.
+      for (const plano of planosPorOm.values()) {
+        if (tipo === TipoPlano.LOGISTICO) {
+          const total = await tx.despesa.aggregate({
+            where: { planoTrabalhoId: plano.id },
+            _sum: { valorCalculado: true },
+          });
+          await tx.planoTrabalho.update({
+            where: { id: plano.id },
+            data: { valorTotalDespesas: total._sum.valorCalculado || 0 },
+          });
+        } else {
+          const total = await tx.despesaOperacionalNatureza.aggregate({
+            where: { despesaOperacional: { planoTrabalhoId: plano.id } },
+            _sum: { valor: true },
+          });
+          await tx.planoTrabalho.update({
+            where: { id: plano.id },
+            data: { valorTotalDespesas: total._sum.valor || 0 },
+          });
+        }
+
+        await tx.auditoriaLog.create({
+          data: {
+            tipoEvento: TipoEvento.CRIACAO,
+            descricao: `Plano de Trabalho "${plano.titulo}" importado de "${origem}"`,
+            usuarioId: user.id,
+            planoTrabalhoId: plano.id,
+            operacaoId,
+            metadados: { linhasImportadas: linhas.length, origem },
+          },
         });
       }
 
-      await tx.auditoriaLog.create({
-        data: {
-          tipoEvento: TipoEvento.CRIACAO,
-          descricao: `Plano de Trabalho "${plano.titulo}" importado de "${origem}"`,
-          usuarioId: user.id,
-          planoTrabalhoId: plano.id,
-          operacaoId,
-          metadados: { linhasImportadas: linhas.length, origem },
-        },
-      });
-
-      return { planoId: plano.id, avisosLinhas };
+      return {
+        planoIds: Array.from(planosPorOm.values()).map((p) => p.id),
+        avisosLinhas,
+      };
     });
 
     return NextResponse.json({
-      planoId: resultado.planoId,
+      planoId: resultado.planoIds[0],
+      planoIds: resultado.planoIds,
+      planosGerados: resultado.planoIds.length,
       linhasImportadas: linhas.length,
       avisos: [...avisos, ...resultado.avisosLinhas],
     });

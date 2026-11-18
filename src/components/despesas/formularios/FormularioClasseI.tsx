@@ -6,7 +6,7 @@ import {
   calcularValorOperacao,
   gerarCarimboCompleto,
 } from "@/lib/calculos/classeI";
-import { VALORES_REFEICAO, MAX_DIAS_ETAPA } from "@/lib/constants";
+import { VALORES_REFEICAO, CONFIG_MAX_DIAS_ETAPA } from "@/lib/constants";
 import { Tipo } from "@prisma/client";
 import { HandleParametrosChange as HandleParametrosChange } from "../ModalCriarDespesa";
 import type {
@@ -104,7 +104,7 @@ export function FormularioClasseI({
         valorRefeicao: valorEtapa,
         tipoRefeicao: tipoRefeicao,
         diasOperacao,
-        diasEtapaCompleta: MAX_DIAS_ETAPA,
+        diasEtapaCompleta: CONFIG_MAX_DIAS_ETAPA.valor,
       });
     }
 

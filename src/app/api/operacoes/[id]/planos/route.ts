@@ -38,6 +38,8 @@ export async function GET(
             naturezas: { include: { natureza: true } },
           },
         },
+        itensRacaoR2: { include: { om: true } },
+        itensMunicao: { include: { om: true } },
       },
       orderBy: [{ om: { sigla: "asc" } }, { tipo: "asc" }],
     });

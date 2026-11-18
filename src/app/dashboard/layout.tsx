@@ -127,6 +127,7 @@ export default function DashboardLayout({
       children: [
         { name: "Preços", href: "/dashboard/configuracoes/precos" },
         { name: "Despesa Operacional", href: "/dashboard/configuracoes/despesa-operacional" },
+        { name: "Catálogo de Itens (Munição/Ração)", href: "/dashboard/configuracoes/catalogo-itens" },
         { name: "Hierarquia Padrão", href: "/dashboard/configuracoes/hierarquia" },
       ],
     });

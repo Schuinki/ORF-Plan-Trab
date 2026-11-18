@@ -159,12 +159,11 @@ export function ModalBlotterTabela({
         classesData.forEach((classe, idx) => {
           // CLASSE_VI: o cálculo da Entrada Rápida é sempre o mesmo catálogo
           // de equipamentos de engenharia (geradores, embarcações, máquinas
-          // pesadas), independente do Tipo cadastrado (Fardamento, Material
-          // de Campanha, Equipamento Individual). Listar cada Tipo separado
-          // só confunde o usuário (ex.: "Material de Campanha" ao lado de
-          // "Fardamento" sem nenhuma relação real com o item escolhido
-          // depois) — por isso aqui é tratado como as demais Classes sem
-          // Tipo específico, com uma única entrada genérica.
+          // pesadas), independente do Tipo cadastrado (Material de
+          // Engenharia, Material de Campanha, Equipamento Individual).
+          // Listar cada Tipo separado só confunde o usuário — por isso aqui
+          // é tratado como as demais Classes sem Tipo específico, com uma
+          // única entrada genérica.
           const tipos = classe.nome === "CLASSE_VI" ? [] : tiposPorClasseRes[idx];
           tiposMap[classe.id] = tiposPorClasseRes[idx];
           if (tipos.length === 0) {

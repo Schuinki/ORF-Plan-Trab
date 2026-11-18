@@ -10,6 +10,7 @@ import {
   formatarNumero,
   formatarDataExtenso,
   formatarDataCurta,
+  prepararTextoParaTabela,
 } from "@/lib/pdf/formatadores";
 import { agruparConsolidado } from "@/lib/consolidado/construirConsolidado";
 
@@ -51,6 +52,9 @@ export interface DespesaParaPdf {
   /** OM compradora (CODUG do empenho) — usada no agrupamento da DOR. */
   omNomeCompradora: string;
   codUGCompradora: string;
+  /** OM titular do Plano de Trabalho — usada no agrupamento do "OM RESPONSÁVEL". */
+  omNomeOwner: string;
+  codUGOwner: string;
   valor30: number;
   valor39: number;
   gnd3: number;
@@ -79,7 +83,8 @@ function extrairMemoriaCalculo(parametros: unknown): string {
 }
 
 export function processarDespesas(
-  despesas: DespesaWithRelations[]
+  despesas: DespesaWithRelations[],
+  omOwner?: { nome: string; codUG: string | null }
 ): DespesaParaPdf[] {
   // Cada despesa gera uma linha POR OM do rateio, com os valores
   // distribuídos pelo percentual de cada OM (DespesaOM.percentual).
@@ -156,6 +161,8 @@ export function processarDespesas(
       codUGDestino: omDestino?.codUG || "",
       omNomeCompradora: omCompradora ? `${omCompradora.sigla}` : "",
       codUGCompradora: omCompradora?.codUG || "",
+      omNomeOwner: omOwner?.nome || (omDestino ? `${omDestino.sigla}` : ""),
+      codUGOwner: omOwner?.codUG || omDestino?.codUG || "",
       valor30: valor30Total * fracao,
       valor39: valor39Total * fracao,
       gnd3: (valor30Total + valor39Total) * fracao,
@@ -163,10 +170,11 @@ export function processarDespesas(
       precoUnitario,
       precoTotalCombustivel:
         litrosTotal !== null ? valorTotal * fracao : null,
-      memoriaCalculo:
+      memoriaCalculo: prepararTextoParaTabela(
         rateios.length > 1
           ? `${memoriaCalculo}\nRateio desta OM: ${percentual.toFixed(2)}% do total da despesa.`
-          : memoriaCalculo,
+          : memoriaCalculo
+      ),
     }));
   });
 }
@@ -260,14 +268,25 @@ export async function gerarPdfPlanoTrabalho(
   operacao: OperacaoComOM,
   responsavel?: User,
   opcoes?: OpcoesPdf,
-  omsIncluidas?: string[]
-): Promise<void> {
+  omsIncluidas?: string[],
+  /** Quando informado, desenha neste documento (numa página nova) em vez
+   *  de criar/salvar um PDF separado — usado para juntar Logístico,
+   *  Operacional, Ração e Munição num único arquivo (ex.: "Assinar no
+   *  gov.br", onde vários downloads automáticos seguidos são bloqueados
+   *  pelo navegador). */
+  docExistente?: jsPDF
+): Promise<jsPDF> {
   planos = ([] as PlanoComRelacoes[]).concat(planos);
-  const doc = new jsPDF({
-    orientation: "landscape",
-    unit: "mm",
-    format: "a4",
-  });
+  const doc =
+    docExistente ??
+    new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
+  if (docExistente) {
+    doc.addPage("a4", "landscape");
+  }
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -304,10 +323,14 @@ export async function gerarPdfPlanoTrabalho(
   doc.text("EXÉRCITO BRASILEIRO", pageWidth / 2, currentY, { align: "center" });
   currentY += 5;
 
+  // Sem override explícito, usa a OM dona da Operação como cabeçalho —
+  // nunca um nome de OM fixo no código (bug anterior: hardcoded "COMANDO
+  // MILITAR DA AMAZÔNIA", errado para qualquer Operação de outro Comando).
   const omPrincipal =
-    planos.length > 1
-      ? "COMANDO MILITAR DA AMAZÔNIA"
-      : opcoes?.omPrincipal ?? planos[0].om.nome.toUpperCase();
+    opcoes?.omPrincipal?.toUpperCase() ??
+    (planos.length > 1
+      ? operacao.om.nome.toUpperCase()
+      : planos[0].om.nome.toUpperCase());
 
   doc.text(omPrincipal, pageWidth / 2, currentY, {
     align: "center",
@@ -423,14 +446,19 @@ export async function gerarPdfPlanoTrabalho(
   currentY += 5;
 
   // Achata as despesas de TODOS os planos recebidos uma única vez; o
-  // agrupamento por OM (chave = OM destino) acontece sobre essa lista
-  // combinada, então uma OM com dois Planos de Trabalho na mesma Operação
-  // cai num único grupo em vez de aparecer duas vezes.
+  // agrupamento por OM (chave = OM TITULAR do Plano, não o destino do
+  // rateio) acontece sobre essa lista combinada, então uma OM com dois
+  // Planos de Trabalho na mesma Operação cai num único grupo em vez de
+  // aparecer duas vezes. A OM titular ("OM RESPONSÁVEL") não muda mesmo
+  // que a despesa seja rateada para outra OM destino/compradora.
   const todasDespesasBrutas = planos.flatMap((plano) =>
-    processarDespesas(plano.despesas as unknown as DespesaWithRelations[])
+    processarDespesas(plano.despesas as unknown as DespesaWithRelations[], {
+      nome: plano.om.nome,
+      codUG: plano.om.codUG,
+    })
   );
   const { porOM: gruposPorOM } = agruparConsolidado(todasDespesasBrutas, {
-    chaveAgrupamento: "destino",
+    chaveAgrupamento: "owner",
     omsIncluidas,
   });
 
@@ -439,91 +467,117 @@ export async function gerarPdfPlanoTrabalho(
   let valorTotalGeralOperacao = 0;
 
   gruposPorOM.forEach((grupo) => {
-    if (gruposPorOM.length > 1) {
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.text(
-        `OM RESPONSÁVEL: ${grupo.omNome.toUpperCase()}`,
-        marginLeft,
-        currentY
-      );
-      currentY += 8;
-    }
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text(
+      `OM RESPONSÁVEL: ${grupo.omNome.toUpperCase()}`,
+      marginLeft,
+      currentY
+    );
+    currentY += 8;
 
-    const tableBody: (string | number)[][] = grupo.linhas.map(linhaDespesa);
-
-    let subtotal30 = 0;
-    let subtotal39 = 0;
-    let subtotalGnd3 = 0;
-    grupo.linhas.forEach((d) => {
-      subtotal30 += d.valor30;
-      subtotal39 += d.valor39;
-      subtotalGnd3 += d.gnd3;
+    // Dentro da seção da OM responsável, as despesas ainda são quebradas
+    // por OM DESTINO (uma tabela + subtotal por destino) — o rateio interno
+    // para outra OM não muda quem é o responsável pelo Ptrab, mas o valor
+    // de cada destino continua sendo rastreado separadamente.
+    const { porOM: subGruposDestino } = agruparConsolidado(grupo.linhas, {
+      chaveAgrupamento: "destino",
     });
 
-    // Linha de subtotal
-    tableBody.push([
-      "SOMA POR ND E GP DE DESPESA",
-      "",
-      formatarNumero(subtotal30),
-      formatarNumero(subtotal39),
-      formatarNumero(subtotalGnd3),
-      "",
-      "",
-      "",
-      "",
-    ]);
+    let subtotalGnd3Responsavel = 0;
 
-    valorTotalGeralOperacao += subtotalGnd3;
+    subGruposDestino.forEach((subGrupo) => {
+      const tableBody: (string | number)[][] = subGrupo.linhas.map(linhaDespesa);
 
-    autoTable(doc, {
-      head: TABLE_HEAD,
-      body: tableBody,
-      startY: currentY,
-      theme: "grid",
-      styles: {
-        fontSize: 6,
-        cellPadding: 1,
-        overflow: "linebreak",
-        lineWidth: 0.1,
-      },
-      headStyles: {
-        fillColor: [255, 255, 255],
-        textColor: [0, 0, 0],
-        fontStyle: "bold",
-        halign: "center",
-        valign: "middle",
-        lineWidth: 0.2,
-      },
-      columnStyles: COLUMN_STYLES,
-      didParseCell: function (data) {
-        // Estilizar linha de subtotal
-        if (
-          data.row.index === tableBody.length - 1 &&
-          data.section === "body"
-        ) {
-          data.cell.styles.fontStyle = "bold";
-          data.cell.styles.fillColor = [240, 240, 240];
-        }
-      },
-      margin: { left: marginLeft, right: marginRight },
+      let subtotal30 = 0;
+      let subtotal39 = 0;
+      let subtotalGnd3 = 0;
+      subGrupo.linhas.forEach((d) => {
+        subtotal30 += d.valor30;
+        subtotal39 += d.valor39;
+        subtotalGnd3 += d.gnd3;
+      });
+
+      // Linha de subtotal
+      tableBody.push([
+        "SOMA POR ND E GP DE DESPESA",
+        "",
+        formatarNumero(subtotal30),
+        formatarNumero(subtotal39),
+        formatarNumero(subtotalGnd3),
+        "",
+        "",
+        "",
+        "",
+      ]);
+
+      subtotalGnd3Responsavel += subtotalGnd3;
+
+      autoTable(doc, {
+        head: TABLE_HEAD,
+        body: tableBody,
+        startY: currentY,
+        theme: "grid",
+        styles: {
+          fontSize: 6,
+          cellPadding: 1,
+          overflow: "linebreak",
+          lineWidth: 0.1,
+        },
+        headStyles: {
+          fillColor: [255, 255, 255],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+          halign: "center",
+          valign: "middle",
+          lineWidth: 0.2,
+        },
+        columnStyles: COLUMN_STYLES,
+        didParseCell: function (data) {
+          // Estilizar linha de subtotal
+          if (
+            data.row.index === tableBody.length - 1 &&
+            data.section === "body"
+          ) {
+            data.cell.styles.fontStyle = "bold";
+            data.cell.styles.fillColor = [240, 240, 240];
+          }
+        },
+        margin: { left: marginLeft, right: marginRight },
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      currentY = (doc as any).lastAutoTable.finalY + 5;
+
+      // Verificar se precisa de nova página
+      if (currentY > pageHeight - 40) {
+        doc.addPage();
+        currentY = marginTop;
+      }
+
+      // === VALOR TOTAL (do destino, dentro da seção da OM responsável) ===
+      if (subGruposDestino.length > 1) {
+        currentY += 2;
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.text(
+          `Valor destinado à ${subGrupo.omNome}: ${formatarMoeda(subtotalGnd3)}`,
+          pageWidth / 2,
+          currentY,
+          { align: "center" }
+        );
+        currentY += 8;
+      }
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    currentY = (doc as any).lastAutoTable.finalY + 5;
+    valorTotalGeralOperacao += subtotalGnd3Responsavel;
 
-    // Verificar se precisa de nova página
-    if (currentY > pageHeight - 40) {
-      doc.addPage();
-      currentY = marginTop;
-    }
-
-    // === VALOR TOTAL (da OM) ===
+    // === VALOR TOTAL (da OM responsável) ===
     currentY += 5;
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
     doc.text(
-      `VALOR TOTAL (${grupo.omNome}): ${formatarMoeda(subtotalGnd3)}`,
+      `VALOR TOTAL (${grupo.omNome}): ${formatarMoeda(subtotalGnd3Responsavel)}`,
       pageWidth / 2,
       currentY,
       { align: "center" }
@@ -591,6 +645,16 @@ export async function gerarPdfPlanoTrabalho(
     );
   }
 
-  // Salvar o PDF
-  doc.save(`plano_trabalho_${operacao.nome.replace(/\s+/g, "_")}.pdf`);
+  // Salvar o PDF — nome do arquivo inclui a(s) OM(s) para não colidir
+  // quando se baixa o PDF de mais de uma OM da mesma Operação.
+  if (!docExistente) {
+    const siglaArquivo =
+      planos.length > 1
+        ? "Consolidado"
+        : planos[0].om.sigla.replace(/\s+/g, "_");
+    doc.save(
+      `plano_trabalho_${siglaArquivo}_${operacao.nome.replace(/\s+/g, "_")}.pdf`
+    );
+  }
+  return doc;
 }

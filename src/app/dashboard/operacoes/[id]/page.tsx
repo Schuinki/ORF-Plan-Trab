@@ -50,6 +50,11 @@ import { getStatusPlanoLabel } from "@/lib/statusPlano";
 import { ItemOrdenavel } from "@/components/ui/OrdenarLista";
 import { gerarPdfPlanoTrabalho, OpcoesPdf } from "@/lib/pdf/gerarPdfPlanoTrabalho";
 import { gerarPdfPlanoTrabalhoOperacional } from "@/lib/pdf/gerarPdfPlanoTrabalhoOperacional";
+import {
+  gerarPdfPlanoRacao,
+  gerarPdfPlanoMunicao,
+} from "@/lib/pdf/gerarPdfPlanoRacaoMunicao";
+import type { jsPDF } from "jspdf";
 import { TIPOS_OM, getTipoOMLabel } from "@/lib/constants";
 import { AnexoOperacaoBox } from "@/components/operacoes/AnexoOperacaoBox";
 
@@ -355,16 +360,34 @@ export default function OperacaoDetailPage() {
     }
   };
 
+  // Cada OM só pode criar Ptrab em nome de si mesma — apenas o SUPER_ADMIN
+  // pode escolher livremente entre as OMs participantes da operação.
+  const omsSelecionaveisNovoPlano =
+    user?.role === "SUPER_ADMIN"
+      ? operacao?.omsParticipantes || []
+      : (operacao?.omsParticipantes || []).filter(
+          (omPart) => omPart.omId === user?.om.id
+        );
+
   const handleAbrirModalNovoPlano = () => {
-    setNovoPlanoOmId(operacao?.omsParticipantes[0]?.omId || "");
+    const padrao =
+      omsSelecionaveisNovoPlano.find((p) => p.omId === user?.om.id) ||
+      omsSelecionaveisNovoPlano[0];
+    setNovoPlanoOmId(padrao?.omId || "");
     setNovoPlanoTipo(filtroTipoPlano !== "TODOS" ? filtroTipoPlano : "LOGISTICO");
     setShowAdicionarPlanoModal(true);
   };
 
   const handleConfirmarNovoPlano = () => {
     if (!operacao || !novoPlanoOmId) return;
+    const omEscolhida = operacao.omsParticipantes.find(
+      (p) => p.omId === novoPlanoOmId
+    );
+    const omSiglaParam = omEscolhida
+      ? `&omSigla=${encodeURIComponent(omEscolhida.om.sigla)}`
+      : "";
     router.push(
-      `/dashboard/planos/novo?operacaoId=${operacao.id}&omId=${novoPlanoOmId}&tipo=${novoPlanoTipo}`
+      `/dashboard/planos/novo?operacaoId=${operacao.id}&omId=${novoPlanoOmId}&tipo=${novoPlanoTipo}${omSiglaParam}`
     );
   };
 
@@ -537,14 +560,23 @@ export default function OperacaoDetailPage() {
         return;
       }
 
-      // Cada tipo de plano tem um layout de PDF próprio; planos mistos geram
-      // um arquivo por tipo.
+      // Cada tipo de plano tem um layout próprio, mas todos vão para o
+      // MESMO arquivo PDF (uma seção/página por tipo) — gerar vários
+      // arquivos separados faz o navegador bloquear os downloads
+      // automáticos depois do primeiro, dando a impressão de que só o
+      // Logístico foi gerado quando há mais de um tipo de plano na Operação.
       const planosLogisticos = planos.filter(
         (p: { tipo: string }) => p.tipo === "LOGISTICO"
       );
       const planosOperacionais = planos.filter(
         (p: { tipo: string }) =>
           p.tipo === "OPERACIONAL_GND3" || p.tipo === "OPERACIONAL_GND4"
+      );
+      const planosRacao = planos.filter(
+        (p: { tipo: string }) => p.tipo === "RACAO_R2"
+      );
+      const planosMunicao = planos.filter(
+        (p: { tipo: string }) => p.tipo === "MUNICAO"
       );
 
       // A ordem em que cada OM aparece no PDF segue a ordem escolhida pelo
@@ -559,25 +591,55 @@ export default function OperacaoDetailPage() {
 
       const planosLogisticosOrdenados = ordenarPorOm(planosLogisticos);
       const planosOperacionaisOrdenados = ordenarPorOm(planosOperacionais);
+      const planosRacaoOrdenados = ordenarPorOm(planosRacao);
+      const planosMunicaoOrdenados = ordenarPorOm(planosMunicao);
 
       const omsIncluidasCodUGs = omIdsParaCodUGs(omsIncluidasIds);
 
+      let docCombinado: jsPDF | undefined;
+
       if (planosLogisticosOrdenados.length > 0) {
-        await gerarPdfPlanoTrabalho(
+        docCombinado = await gerarPdfPlanoTrabalho(
           planosLogisticosOrdenados,
           operacaoCompleta,
           undefined,
           opcoesAssinatura,
-          omsIncluidasCodUGs
+          omsIncluidasCodUGs,
+          docCombinado
         );
       }
       if (planosOperacionaisOrdenados.length > 0) {
-        await gerarPdfPlanoTrabalhoOperacional(
+        docCombinado = await gerarPdfPlanoTrabalhoOperacional(
           planosOperacionaisOrdenados,
           operacaoCompleta,
           undefined,
           opcoesAssinatura,
-          omsIncluidasCodUGs
+          omsIncluidasCodUGs,
+          docCombinado
+        );
+      }
+      if (planosRacaoOrdenados.length > 0) {
+        docCombinado = await gerarPdfPlanoRacao(
+          planosRacaoOrdenados,
+          operacaoCompleta,
+          undefined,
+          opcoesAssinatura,
+          docCombinado
+        );
+      }
+      if (planosMunicaoOrdenados.length > 0) {
+        docCombinado = await gerarPdfPlanoMunicao(
+          planosMunicaoOrdenados,
+          operacaoCompleta,
+          undefined,
+          opcoesAssinatura,
+          docCombinado
+        );
+      }
+
+      if (docCombinado) {
+        docCombinado.save(
+          `plano_trabalho_${operacaoCompleta.nome.replace(/\s+/g, "_")}.pdf`
         );
       }
     } catch (err) {
@@ -1724,14 +1786,20 @@ export default function OperacaoDetailPage() {
                 <select
                   value={novoPlanoOmId}
                   onChange={(e) => setNovoPlanoOmId(e.target.value)}
-                  className="w-full px-3 py-2 border border-olive-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 bg-white text-sm"
+                  disabled={omsSelecionaveisNovoPlano.length <= 1}
+                  className="w-full px-3 py-2 border border-olive-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-military-500 bg-white text-sm disabled:bg-gray-100 disabled:text-gray-600"
                 >
-                  {operacao.omsParticipantes.map((omPart) => (
+                  {omsSelecionaveisNovoPlano.map((omPart) => (
                     <option key={omPart.id} value={omPart.omId}>
                       {omPart.om.sigla} - {omPart.om.nome}
                     </option>
                   ))}
                 </select>
+                {user?.role !== "SUPER_ADMIN" && (
+                  <p className="text-xs text-olive-600 mt-1">
+                    Você só pode criar Planos de Trabalho em nome da sua própria OM.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-olive-800 mb-1">

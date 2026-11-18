@@ -22,6 +22,10 @@ import {
   OpcoesPdf,
 } from "@/lib/pdf/gerarPdfPlanoTrabalho";
 import { gerarPdfPlanoTrabalhoOperacional } from "@/lib/pdf/gerarPdfPlanoTrabalhoOperacional";
+import {
+  gerarPdfPlanoRacao,
+  gerarPdfPlanoMunicao,
+} from "@/lib/pdf/gerarPdfPlanoRacaoMunicao";
 
 interface OM {
   id: string;
@@ -397,6 +401,20 @@ export default function PlanoTrabalhoPage() {
           planoCompleto.responsavel,
           opcoesFinais
         );
+      } else if (planoCompleto.tipo === "RACAO_R2") {
+        await gerarPdfPlanoRacao(
+          planoCompleto,
+          planoCompleto.operacao,
+          planoCompleto.responsavel,
+          opcoesFinais
+        );
+      } else if (planoCompleto.tipo === "MUNICAO") {
+        await gerarPdfPlanoMunicao(
+          planoCompleto,
+          planoCompleto.operacao,
+          planoCompleto.responsavel,
+          opcoesFinais
+        );
       } else {
         await gerarPdfPlanoTrabalho(
           planoCompleto,
@@ -507,15 +525,11 @@ export default function PlanoTrabalhoPage() {
               label="Mais ações"
               icon={<MoreHorizontal className="w-4 h-4" />}
               items={[
-                ...(plano.tipo !== "RACAO_R2" && plano.tipo !== "MUNICAO"
-                  ? [
-                      {
-                        label: "Exportar PDF",
-                        icon: <FileDown className="w-4 h-4" />,
-                        onClick: handleGerarPdf,
-                      },
-                    ]
-                  : []),
+                {
+                  label: "Exportar PDF",
+                  icon: <FileDown className="w-4 h-4" />,
+                  onClick: handleGerarPdf,
+                },
                 {
                   label: isGeneratingXlsx ? "Gerando..." : "Exportar XLSX",
                   icon: <FileDown className="w-4 h-4" />,

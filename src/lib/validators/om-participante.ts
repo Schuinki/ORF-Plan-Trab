@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { OrganizacaoMilitar } from "@prisma/client";
+import { OrganizacaoMilitar, Role } from "@prisma/client";
 
 /**
  * Verifica se uma OM é "folha" (não tem subordinadas).
@@ -58,6 +58,24 @@ export async function getOmsSubordinadasDiretas(
     where: { omPaiId: omId },
     orderBy: { sigla: "asc" },
   });
+}
+
+/**
+ * Verifica se um usuário pode agir (criar/editar Ptrab e seu conteúdo) em
+ * nome de uma determinada OM: a própria OM, qualquer OM subordinada na
+ * hierarquia (ex.: S4 de um Comando lançando o Ptrab de uma unidade
+ * subordinada sem acesso próprio ao sistema), ou qualquer OM se
+ * SUPER_ADMIN. Uma OM "de fora" da própria cadeia (ex.: outra unidade
+ * participante da mesma Operação) nunca é permitida.
+ */
+export async function canUserActOnOm(
+  userRole: Role,
+  userOmId: string,
+  omAlvoId: string
+): Promise<boolean> {
+  if (userRole === "SUPER_ADMIN") return true;
+  if (userOmId === omAlvoId) return true;
+  return isSubordinadaDeParticipante(omAlvoId, [userOmId]);
 }
 
 /**

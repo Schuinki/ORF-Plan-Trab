@@ -144,6 +144,138 @@ function valoresLinha(row: ExcelJS.Row): string[] {
   return Array.from(row.values as unknown[]).slice(1).map(normalizarTexto);
 }
 
+/**
+ * Núcleo do parser, independente de biblioteca/formato de origem: recebe
+ * uma aba já normalizada como matriz de strings (uma linha = um array de
+ * células já convertidas para texto) e aplica a mesma heurística de
+ * detecção de cabeçalho/colunas usada para o .xlsx. Usado tanto pelo
+ * caminho exceljs (.xlsx) quanto pelo caminho SheetJS (.xls/.ods).
+ */
+function processarAba(
+  nomeAba: string,
+  linhasAba: string[][],
+  avisos: string[]
+): LinhaImportada[] {
+  const linhas: LinhaImportada[] = [];
+
+  // Acha a linha de cabeçalho procurando "DESPESA" numa linha com várias
+  // células preenchidas E com textos diferentes entre si. As frases
+  // narrativas dos itens 1-5 do modelo oficial (que também contêm a
+  // palavra "DESPESA") costumam estar numa única célula mesclada que
+  // ocupa a largura toda da tabela — nesse caso todas as colunas lidas
+  // voltam com o MESMO texto repetido, o que não acontece na linha real
+  // de títulos (cada coluna tem um rótulo diferente: "OM (UGE)",
+  // "NATUREZA DE DESPESA", "DETALHAMENTO..."). Modelos reais do Exército
+  // têm bem mais linhas de preâmbulo do que o nosso próprio export, por
+  // isso a janela de busca é generosa.
+  let indiceCabecalho = -1; // 0-based, índice em linhasAba
+  let cabecalho: string[] = [];
+  for (let i = 0; i < Math.min(40, linhasAba.length); i++) {
+    const valores = linhasAba[i] || [];
+    const preenchidas = valores.filter((v) => v.trim() !== "");
+    const textosDistintos = new Set(preenchidas).size;
+    if (
+      preenchidas.length >= 3 &&
+      textosDistintos >= 2 &&
+      valores.some((v) => v.toUpperCase().includes("DESPESA"))
+    ) {
+      indiceCabecalho = i;
+      cabecalho = valores;
+      break;
+    }
+  }
+
+  if (indiceCabecalho === -1) {
+    avisos.push(`Aba "${nomeAba}": cabeçalho não reconhecido, pulada.`);
+    return linhas;
+  }
+
+  const idxTitulo = acharColuna(cabecalho, ["DESPESA"]);
+  const idxOm = acharColuna(cabecalho, ["OM "]);
+  const idxDetalhamento = acharColuna(cabecalho, [
+    "DETALHAMENTO",
+    "MEMÓRIA",
+    "MEMORIA",
+  ]);
+
+  // O modelo oficial do Exército divide o cabeçalho em duas linhas: uma
+  // de rótulos ("NATUREZA DE DESPESA (ND)", repetido) e, logo abaixo, uma
+  // com os códigos de ND de fato ("33.90.30" etc.). Nosso próprio export
+  // põe tudo numa única linha. Por isso os códigos são procurados na
+  // linha de cabeçalho e, se não encontrados ali, na linha seguinte —
+  // nesse segundo caso essa linha extra também é pulada como dado.
+  const cabecalhoSeguinte = linhasAba[indiceCabecalho + 1] || [];
+  const idxPorNd: Record<string, number> = {};
+  let usouLinhaDeCodigosSeparada = false;
+  CODIGOS_ND.forEach((codigo) => {
+    let idx = cabecalho.findIndex((c) => c.includes(codigo));
+    if (idx === -1) {
+      idx = cabecalhoSeguinte.findIndex((c) => c.includes(codigo));
+      if (idx !== -1) usouLinhaDeCodigosSeparada = true;
+    }
+    if (idx !== -1) idxPorNd[codigo] = idx;
+  });
+
+  if (idxTitulo === -1) {
+    avisos.push(`Aba "${nomeAba}": coluna de despesa não encontrada.`);
+    return linhas;
+  }
+
+  const formatoPlano: "LOGISTICO" | "OPERACIONAL" = Object.keys(
+    idxPorNd
+  ).some((codigo) => CODIGOS_SO_OPERACIONAL.includes(codigo))
+    ? "OPERACIONAL"
+    : "LOGISTICO";
+
+  const primeiraLinhaDados =
+    indiceCabecalho + (usouLinhaDeCodigosSeparada ? 2 : 1);
+
+  for (let i = primeiraLinhaDados; i < linhasAba.length; i++) {
+    const valores = linhasAba[i] || [];
+    const titulo = (valores[idxTitulo] || "").trim();
+
+    if (!titulo) continue; // linha em branco
+    if (/^SOMA\b/i.test(titulo)) continue; // linha de subtotal
+    if (/^VALOR TOTAL\b/i.test(titulo)) continue; // linha de total (OM ou geral)
+    if (titulo.toUpperCase().includes("DESPESA")) {
+      // Início de um novo bloco de OM dentro da mesma aba — o modelo
+      // oficial repete o cabeçalho (rótulos + códigos de ND) a cada OM
+      // responsável. Pula esta linha e, se a seguinte repetir o mesmo
+      // padrão (a linha de códigos), pula ela também.
+      const proximoTitulo = ((linhasAba[i + 1] || [])[idxTitulo] || "").trim();
+      if (proximoTitulo.toUpperCase().includes("DESPESA")) i += 1;
+      continue;
+    }
+
+    const valoresPorNd: Record<string, number> = {};
+    let somaValores = 0;
+    Object.entries(idxPorNd).forEach(([codigo, idx]) => {
+      const valor = parseNumeroPtBR(valores[idx]);
+      if (valor > 0) {
+        valoresPorNd[codigo] = valor;
+        somaValores += valor;
+      }
+    });
+
+    if (somaValores === 0) continue; // linha sem valor, ignora
+
+    const detalhamento =
+      idxDetalhamento !== -1 ? (valores[idxDetalhamento] || "").trim() : "";
+
+    linhas.push({
+      omTexto: idxOm !== -1 ? valores[idxOm] || "" : "",
+      titulo,
+      valoresPorNd,
+      detalhamento,
+      classeSugerida: inferirClasseDespesa(titulo, detalhamento),
+      formatoPlano,
+      origemAba: nomeAba,
+    });
+  }
+
+  return linhas;
+}
+
 export async function parsePTrabXlsx(
   buffer: Buffer | ArrayBuffer
 ): Promise<ResultadoParse> {
@@ -165,133 +297,67 @@ export async function parsePTrabXlsx(
     // só as abas com a tabela visível.
     if (/dados.*não editar|totais gerais/i.test(sheet.name)) continue;
 
-    // Acha a linha de cabeçalho procurando "DESPESA" numa linha com várias
-    // células preenchidas E com textos diferentes entre si. As frases
-    // narrativas dos itens 1-5 do modelo oficial (que também contêm a
-    // palavra "DESPESA") costumam estar numa única célula mesclada que
-    // ocupa a largura toda da tabela — nesse caso todas as colunas lidas
-    // voltam com o MESMO texto repetido, o que não acontece na linha real
-    // de títulos (cada coluna tem um rótulo diferente: "OM (UGE)",
-    // "NATUREZA DE DESPESA", "DETALHAMENTO..."). Modelos reais do Exército
-    // têm bem mais linhas de preâmbulo do que o nosso próprio export, por
-    // isso a janela de busca é generosa.
-    let linhaCabecalho = -1;
-    let cabecalho: string[] = [];
-    for (let r = 1; r <= Math.min(40, sheet.rowCount); r++) {
-      const valores = valoresLinha(sheet.getRow(r));
-      const preenchidas = valores.filter((v) => v.trim() !== "");
-      const textosDistintos = new Set(preenchidas).size;
-      if (
-        preenchidas.length >= 3 &&
-        textosDistintos >= 2 &&
-        valores.some((v) => v.toUpperCase().includes("DESPESA"))
-      ) {
-        linhaCabecalho = r;
-        cabecalho = valores;
-        break;
-      }
+    const linhasAba: string[][] = [];
+    for (let r = 1; r <= sheet.rowCount; r++) {
+      linhasAba.push(valoresLinha(sheet.getRow(r)));
     }
 
-    if (linhaCabecalho === -1) {
-      avisos.push(`Aba "${sheet.name}": cabeçalho não reconhecido, pulada.`);
-      continue;
-    }
-
-    const idxTitulo = acharColuna(cabecalho, ["DESPESA"]);
-    const idxOm = acharColuna(cabecalho, ["OM "]);
-    const idxDetalhamento = acharColuna(cabecalho, [
-      "DETALHAMENTO",
-      "MEMÓRIA",
-      "MEMORIA",
-    ]);
-
-    // O modelo oficial do Exército divide o cabeçalho em duas linhas: uma
-    // de rótulos ("NATUREZA DE DESPESA (ND)", repetido) e, logo abaixo, uma
-    // com os códigos de ND de fato ("33.90.30" etc.). Nosso próprio export
-    // põe tudo numa única linha. Por isso os códigos são procurados na
-    // linha de cabeçalho e, se não encontrados ali, na linha seguinte —
-    // nesse segundo caso essa linha extra também é pulada como dado.
-    const cabecalhoSeguinte =
-      linhaCabecalho < sheet.rowCount
-        ? valoresLinha(sheet.getRow(linhaCabecalho + 1))
-        : [];
-    const idxPorNd: Record<string, number> = {};
-    let usouLinhaDeCodigosSeparada = false;
-    CODIGOS_ND.forEach((codigo) => {
-      let idx = cabecalho.findIndex((c) => c.includes(codigo));
-      if (idx === -1) {
-        idx = cabecalhoSeguinte.findIndex((c) => c.includes(codigo));
-        if (idx !== -1) usouLinhaDeCodigosSeparada = true;
-      }
-      if (idx !== -1) idxPorNd[codigo] = idx;
-    });
-
-    if (idxTitulo === -1) {
-      avisos.push(`Aba "${sheet.name}": coluna de despesa não encontrada.`);
-      continue;
-    }
-
-    const formatoPlano: "LOGISTICO" | "OPERACIONAL" = Object.keys(
-      idxPorNd
-    ).some((codigo) => CODIGOS_SO_OPERACIONAL.includes(codigo))
-      ? "OPERACIONAL"
-      : "LOGISTICO";
-
-    const primeiraLinhaDados =
-      linhaCabecalho + (usouLinhaDeCodigosSeparada ? 2 : 1);
-
-    for (let r = primeiraLinhaDados; r <= sheet.rowCount; r++) {
-      const row = sheet.getRow(r);
-      const valores = (row.values as unknown[]).slice(1);
-      const titulo = normalizarTexto(valores[idxTitulo]).trim();
-
-      if (!titulo) continue; // linha em branco
-      if (/^SOMA\b/i.test(titulo)) continue; // linha de subtotal
-      if (/^VALOR TOTAL\b/i.test(titulo)) continue; // linha de total (OM ou geral)
-      if (titulo.toUpperCase().includes("DESPESA")) {
-        // Início de um novo bloco de OM dentro da mesma aba — o modelo
-        // oficial repete o cabeçalho (rótulos + códigos de ND) a cada OM
-        // responsável. Pula esta linha e, se a seguinte repetir o mesmo
-        // padrão (a linha de códigos), pula ela também.
-        const proximoTitulo = (
-          valoresLinha(sheet.getRow(r + 1))[idxTitulo] || ""
-        ).trim();
-        if (proximoTitulo.toUpperCase().includes("DESPESA")) r += 1;
-        continue;
-      }
-
-      const valoresPorNd: Record<string, number> = {};
-      let somaValores = 0;
-      Object.entries(idxPorNd).forEach(([codigo, idx]) => {
-        const valor = parseNumeroPtBR(valores[idx]);
-        if (valor > 0) {
-          valoresPorNd[codigo] = valor;
-          somaValores += valor;
-        }
-      });
-
-      if (somaValores === 0) continue; // linha sem valor, ignora
-
-      const detalhamento =
-        idxDetalhamento !== -1
-          ? normalizarTexto(valores[idxDetalhamento]).trim()
-          : "";
-
-      linhas.push({
-        omTexto: idxOm !== -1 ? normalizarTexto(valores[idxOm]) : "",
-        titulo,
-        valoresPorNd,
-        detalhamento,
-        classeSugerida: inferirClasseDespesa(titulo, detalhamento),
-        formatoPlano,
-        origemAba: sheet.name,
-      });
-    }
+    linhas.push(...processarAba(sheet.name, linhasAba, avisos));
   }
 
   if (linhas.length === 0) {
     avisos.push(
       "Nenhuma linha de despesa foi reconhecida neste arquivo. Confira se ele segue o layout do modelo (colunas de OM, ND e Detalhamento)."
+    );
+  }
+
+  return { linhas, avisos };
+}
+
+/**
+ * Parser de .xls (binário antigo OLE2) e .ods (OpenDocument/LibreOffice)
+ * via SheetJS — o exceljs só lê .xlsx. Reaproveita a mesma heurística de
+ * `processarAba` usada pelo .xlsx; a única diferença é como cada
+ * biblioteca extrai a matriz de células de cada aba.
+ */
+export async function parsePTrabSheetJs(
+  buffer: Buffer | ArrayBuffer,
+  tipoArquivo: "xls" | "ods"
+): Promise<ResultadoParse> {
+  const XLSX = await import("xlsx");
+  const workbook = XLSX.read(Buffer.from(buffer as ArrayBuffer), {
+    type: "buffer",
+    cellText: true,
+  });
+
+  const linhas: LinhaImportada[] = [];
+  const avisos: string[] = [];
+
+  for (const nomeAba of workbook.SheetNames) {
+    if (/dados.*não editar|totais gerais/i.test(nomeAba)) continue;
+
+    const planilha = workbook.Sheets[nomeAba];
+    if (!planilha) continue;
+
+    // header: 1 => array de arrays (uma linha = um array de células), na
+    // ordem em que aparecem na planilha; defval garante linhas densas
+    // (sem "buracos" undefined) mesmo quando uma célula está vazia — a
+    // mesma garantia que `valoresLinha` dá para o caminho exceljs.
+    const matriz = XLSX.utils.sheet_to_json<unknown[]>(planilha, {
+      header: 1,
+      defval: "",
+      raw: false,
+    });
+    const linhasAba = matriz.map((linha) =>
+      linha.map((celula) => normalizarTexto(celula))
+    );
+
+    linhas.push(...processarAba(nomeAba, linhasAba, avisos));
+  }
+
+  if (linhas.length === 0) {
+    avisos.push(
+      `Nenhuma linha de despesa foi reconhecida neste arquivo .${tipoArquivo}. Confira se ele segue o layout do modelo (colunas de OM, ND e Detalhamento).`
     );
   }
 

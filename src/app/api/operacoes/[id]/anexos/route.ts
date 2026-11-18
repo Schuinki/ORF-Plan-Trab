@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-
-export const TIPOS_ANEXO = ["PTRAB_ASSINADO", "DOR_ASSINADO"] as const;
-export type TipoAnexo = (typeof TIPOS_ANEXO)[number];
+import { TIPOS_ANEXO, TipoAnexo } from "@/lib/anexos";
 
 const TAMANHO_MAXIMO_BYTES = 20 * 1024 * 1024; // 20 MB
 

@@ -10,8 +10,14 @@
  * com múltiplos Planos sempre cai num único grupo.
  *
  * Também centraliza o filtro de "quais OMs entram" (omsIncluidas) e a
- * chave de agrupamento (destino — usada pelo Plano de Trabalho/carimbo —
- * ou comprador — usada pela DOR/empenho).
+ * chave de agrupamento:
+ * - "owner" — a OM titular do Plano de Trabalho (quem lançou/é responsável
+ *   pela despesa). É a usada pelo Plano de Trabalho/carimbo: mesmo que uma
+ *   despesa seja rateada para outra OM destino/compradora, o "OM
+ *   RESPONSÁVEL" exibido continua sendo a OM titular do Plano — ela não
+ *   muda em função do rateio.
+ * - "destino" — a OM que efetivamente recebe/usa o recurso em cada rateio.
+ * - "comprador" — a UG que empenha (usada pela DOR).
  */
 
 export interface LinhaConsolidavel {
@@ -19,6 +25,9 @@ export interface LinhaConsolidavel {
   codUGDestino: string;
   omNomeCompradora: string;
   codUGCompradora: string;
+  /** OM titular do Plano de Trabalho de onde a linha veio (não muda por rateio). */
+  omNomeOwner?: string;
+  codUGOwner?: string;
 }
 
 export interface GrupoConsolidado<T> {
@@ -34,15 +43,15 @@ export interface ConsolidadoResultado<T> {
 export interface OpcoesConsolidado {
   /** CODUGs a incluir; se omitido, inclui todas as OMs presentes nas linhas. */
   omsIncluidas?: string[];
-  /** "destino" (padrão, usado pelo Plano de Trabalho) ou "comprador" (usado pela DOR). */
-  chaveAgrupamento?: "destino" | "comprador";
+  /** "owner" (padrão, usado pelo Plano de Trabalho/"OM RESPONSÁVEL"), "destino" ou "comprador" (usado pela DOR). */
+  chaveAgrupamento?: "owner" | "destino" | "comprador";
 }
 
 export function agruparConsolidado<T extends LinhaConsolidavel>(
   linhas: T[],
   opts?: OpcoesConsolidado
 ): ConsolidadoResultado<T> {
-  const chave = opts?.chaveAgrupamento ?? "destino";
+  const chave = opts?.chaveAgrupamento ?? "owner";
   const omsIncluidasSet = opts?.omsIncluidas
     ? new Set(opts.omsIncluidas)
     : null;
@@ -51,9 +60,17 @@ export function agruparConsolidado<T extends LinhaConsolidavel>(
 
   for (const linha of linhas) {
     const codUG =
-      chave === "comprador" ? linha.codUGCompradora : linha.codUGDestino;
+      chave === "comprador"
+        ? linha.codUGCompradora
+        : chave === "destino"
+          ? linha.codUGDestino
+          : linha.codUGOwner || linha.codUGDestino;
     const omNome =
-      chave === "comprador" ? linha.omNomeCompradora : linha.omNomeDestino;
+      chave === "comprador"
+        ? linha.omNomeCompradora
+        : chave === "destino"
+          ? linha.omNomeDestino
+          : linha.omNomeOwner || linha.omNomeDestino;
     const chaveGrupo = codUG || "SEM_OM";
 
     if (omsIncluidasSet && codUG && !omsIncluidasSet.has(codUG)) {

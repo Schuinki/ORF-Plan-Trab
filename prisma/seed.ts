@@ -2,6 +2,10 @@ import { PrismaClient, TipoOM } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import omsData from "./oms.json";
 import { SEED_RASCUNHOS_DESPESA_OPERACIONAL } from "../src/lib/configuracoes/rascunhoDespesaOperacional";
+import {
+  SEED_CATALOGO_MUNICAO,
+  SEED_CATALOGO_RACAO,
+} from "../src/lib/configuracoes/catalogoItensOficial";
 
 const prisma = new PrismaClient();
 
@@ -18,6 +22,29 @@ async function seedRascunhosDespesaOperacional() {
   }
   console.log(
     `  ✓ ${SEED_RASCUNHOS_DESPESA_OPERACIONAL.length} rascunhos de despesa operacional criados`
+  );
+}
+
+// Catálogo inicial de itens de Munição e Ração (Configurações > Catálogo de
+// Itens), extraído da Diretriz de Prontidão Logística 2026. Usa upsert para
+// ser seguro em reinstalações/re-seed de uma base já existente.
+async function seedCatalogoItens() {
+  for (const item of SEED_CATALOGO_MUNICAO) {
+    await prisma.catalogoItemMunicao.upsert({
+      where: { neeNsn_tipo: { neeNsn: item.neeNsn, tipo: item.tipo } },
+      update: {},
+      create: item,
+    });
+  }
+  for (const item of SEED_CATALOGO_RACAO) {
+    await prisma.catalogoItemRacao.upsert({
+      where: { item: item.item },
+      update: {},
+      create: item,
+    });
+  }
+  console.log(
+    `  ✓ ${SEED_CATALOGO_MUNICAO.length} itens de munição e ${SEED_CATALOGO_RACAO.length} item(ns) de ração criados no catálogo`
   );
 }
 
@@ -155,12 +182,19 @@ async function main() {
   await prisma.despesaOM.deleteMany();
   await prisma.despesaNatureza.deleteMany();
   await prisma.despesa.deleteMany();
+  // Despesas Operacionais (GND3/GND4) também referenciam NaturezaDespesa —
+  // precisam ser limpas antes dela, senão o deleteMany abaixo falha por
+  // violação de chave estrangeira em bancos que já têm Planos Operacionais.
+  await prisma.despesaOperacionalNatureza.deleteMany();
+  await prisma.despesaOperacional.deleteMany();
   await prisma.tipo.deleteMany();
   await prisma.classe.deleteMany();
   await prisma.naturezaDespesa.deleteMany();
   await prisma.planoTrabalho.deleteMany();
+  await prisma.anexoOperacao.deleteMany();
   await prisma.operacaoOM.deleteMany();
   await prisma.operacao.deleteMany();
+  await prisma.artigoConsulta.deleteMany();
   await prisma.user.deleteMany();
   await prisma.organizacaoMilitar.deleteMany();
 
@@ -496,7 +530,7 @@ async function main() {
   await prisma.classe.create({
     data: {
       nome: "CLASSE_II",
-      descricao: "Manutenção de Material de Intendência",
+      descricao: "Material de Intendência",
       gnd: "GND 3",
       naturezasPermitidas: ["33.90.30", "33.90.39"],
       possuiCalculoAutomatizado: true,
@@ -526,7 +560,11 @@ async function main() {
   const classeV = await prisma.classe.create({
     data: {
       nome: "CLASSE_V",
-      descricao: "Munição e Explosivos",
+      // O cálculo automatizado desta classe (ver calcularClasseV em
+      // src/lib/calculos/classeV.ts) é de manutenção de armamento, não de
+      // munição/explosivos — consumo de munição é lançado no Ptrab de
+      // Munição dedicado (ItemMunicao), não aqui.
+      descricao: "Manutenção de Armamento",
       gnd: "GND 3",
       naturezasPermitidas: ["33.90.30"],
       possuiCalculoAutomatizado: true,
@@ -536,7 +574,10 @@ async function main() {
   const classeVI = await prisma.classe.create({
     data: {
       nome: "CLASSE_VI",
-      descricao: "Material Individual",
+      // Ver nota em "Classe VI" mais abaixo: o cálculo automatizado é de
+      // equipamentos de engenharia, não material individual/fardamento.
+      // Nome oficial conforme Diretriz de Prontidão Logística 2026.
+      descricao: "Material de Engenharia e Cartografia",
       gnd: "GND 3",
       naturezasPermitidas: ["33.90.30"],
       possuiCalculoAutomatizado: true,
@@ -546,7 +587,12 @@ async function main() {
   const classeVII = await prisma.classe.create({
     data: {
       nome: "CLASSE_VII",
-      descricao: "Equipamento Principal",
+      // O cálculo automatizado desta classe (ver calcularClasseVII em
+      // src/lib/calculos/classeVII.ts) é de manutenção de equipamentos
+      // eletrônicos (rádios, servidores), não "equipamento principal"
+      // (viaturas/armamento) no sentido doutrinário tradicional.
+      // Nome oficial conforme Diretriz de Prontidão Logística 2026.
+      descricao: "Material de Comunicações, Eletrônica e Informática",
       gnd: "GND 3",
       naturezasPermitidas: ["33.90.30", "33.90.39"],
       possuiCalculoAutomatizado: true,
@@ -655,7 +701,10 @@ async function main() {
   await prisma.tipo.createMany({
     data: [
       {
-        nome: "Fardamento",
+        // O cálculo da Classe VI neste sistema é de equipamentos de
+        // engenharia (ver calcularClasseVI em src/lib/calculos/classeVI.ts),
+        // não fardamento — nome corrigido para refletir o que é calculado.
+        nome: "Material de Engenharia",
         classeId: classeVI.id,
         isCombustivel: false,
         isCriavelUsuario: true,
@@ -717,6 +766,7 @@ async function main() {
   console.log("  ✓ Tipos de despesa criados para todas as classes");
 
   await seedRascunhosDespesaOperacional();
+  await seedCatalogoItens();
 
   console.log("\n✅ Seed concluído com sucesso!\n");
   console.log("═══════════════════════════════════════════════");

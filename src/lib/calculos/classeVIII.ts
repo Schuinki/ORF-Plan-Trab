@@ -2,7 +2,11 @@
  * CLASSE VIII — MATERIAL DE SAÚDE
  *
  * Cálculo baseado nos kits de saúde padronizados
- * Fórmula: Σ(quantidade × custo_unitario)
+ * Fórmula: Σ(quantidade × custo_unitario) × 1,20
+ * (reserva de 20% — Diretriz de Prontidão Logística 2026, Apêndice 2,
+ * item 8.b: "Toda e qualquer reposição deverá considerar o valor total
+ * calculado, acrescido de 20% de reserva, para atendimento de
+ * eventualidades.")
  */
 
 // Tipos de kit disponíveis
@@ -91,6 +95,22 @@ export interface ResultadoClasseVIII {
 }
 
 /**
+ * Reserva de 20% sobre o valor total (padrão) — editável em
+ * Configurações > Preços.
+ */
+export const CONFIG_RESERVA_CLASSE_VIII = { valor: 1.2 };
+
+/** Aplica um override da reserva vindo de Configurações > Preços. */
+export function aplicarOverrideReservaClasseVIII(
+  overrides: Record<string, { valor?: number }>
+): void {
+  const valor = overrides.SAUDE?.valor;
+  if (typeof valor === "number" && valor > 0) {
+    CONFIG_RESERVA_CLASSE_VIII.valor = valor;
+  }
+}
+
+/**
  * Obtém o custo efetivo de um item (customizado ou padrão)
  */
 export function getCustoEfetivo(item: ItemMaterialSaude): number {
@@ -126,6 +146,7 @@ function calcularCustoItem(item: ItemMaterialSaude): number {
  */
 function gerarCarimbo(
   materiais: ItemMaterialSaude[],
+  valorSemReserva: number,
   valorTotal: number,
   unidade?: string,
   nomeOperacao?: string,
@@ -154,6 +175,10 @@ function gerarCarimbo(
     memoriaCalculo += `  Subtotal: R$ ${custoItem.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n\n`;
   }
 
+  const percReserva = ((CONFIG_RESERVA_CLASSE_VIII.valor - 1) * 100).toFixed(0);
+  memoriaCalculo += `Subtotal (sem reserva): R$ ${valorSemReserva.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}\n`;
+  memoriaCalculo += `Reserva de eventualidades (Diretriz de Prontidão Logística 2026, Ap. 2, 8.b): ${percReserva}%`;
+
   return `${naturezasTexto} – Destinado ao ${unidadeTexto}. ${textoPadrao}
 Memória de Cálculo:
 
@@ -174,18 +199,27 @@ export function calcularClasseVIII(
     throw new Error("Deve haver pelo menos um material de saúde");
   }
 
-  let valorTotal = 0;
+  let valorSemReserva = 0;
 
   for (const item of params.materiais) {
     if (item.quantidade <= 0) {
       throw new Error(`Quantidade inválida para ${getNomeMaterial(item)}`);
     }
 
-    valorTotal += calcularCustoItem(item);
+    valorSemReserva += calcularCustoItem(item);
   }
 
-  const valorTotalFinal = Number(valorTotal.toFixed(2));
-  const carimbo = gerarCarimbo(params.materiais, valorTotalFinal, unidade, nomeOperacao, naturezas);
+  const valorTotalFinal = Number(
+    (valorSemReserva * CONFIG_RESERVA_CLASSE_VIII.valor).toFixed(2)
+  );
+  const carimbo = gerarCarimbo(
+    params.materiais,
+    Number(valorSemReserva.toFixed(2)),
+    valorTotalFinal,
+    unidade,
+    nomeOperacao,
+    naturezas
+  );
 
   return {
     valorTotal: valorTotalFinal,

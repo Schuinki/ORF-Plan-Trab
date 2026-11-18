@@ -55,6 +55,37 @@ export function formatarDataExtenso(data: Date): string {
   return `${dia} de ${mes} de ${ano}`;
 }
 
+/**
+ * Normaliza quebras de linha ("\r\n"/"\r" → "\n") e força uma quebra em
+ * qualquer "palavra" (trecho sem espaço) maior que `maxCaracteres` — o
+ * jsPDF-autotable só quebra linha em espaços, então uma palavra isolada
+ * mais larga que a coluna (ex.: nome de equipamento colado, texto colado
+ * sem espaços) escapa da célula/tabela em vez de quebrar.
+ */
+export function prepararTextoParaTabela(
+  texto: string,
+  maxCaracteres = 45
+): string {
+  return texto
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((linha) =>
+      linha
+        .split(" ")
+        .map((palavra) => {
+          if (palavra.length <= maxCaracteres) return palavra;
+          const partes: string[] = [];
+          for (let i = 0; i < palavra.length; i += maxCaracteres) {
+            partes.push(palavra.slice(i, i + maxCaracteres));
+          }
+          return partes.join(" ");
+        })
+        .join(" ")
+    )
+    .join("\n");
+}
+
 export function formatarDataCurta(data: Date): string {
   const dia = data.getDate();
   const mes = data.getMonth() + 1;

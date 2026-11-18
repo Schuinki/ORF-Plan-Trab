@@ -16,6 +16,11 @@ interface ModalCriarItemRacaoProps {
   itemToEdit?: ItemRacao | null;
 }
 
+interface CatalogoItemRacaoDTO {
+  id: string;
+  item: string;
+}
+
 export function ModalCriarItemRacao({
   isOpen,
   onClose,
@@ -31,6 +36,16 @@ export function ModalCriarItemRacao({
   const [quantidade, setQuantidade] = useState("");
   const [memoria, setMemoria] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [catalogo, setCatalogo] = useState<CatalogoItemRacaoDTO[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetch("/api/configuracoes/catalogo-racao")
+        .then((res) => (res.ok ? res.json() : []))
+        .then(setCatalogo)
+        .catch(() => setCatalogo([]));
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -156,11 +171,23 @@ export function ModalCriarItemRacao({
             </label>
             <input
               type="text"
+              list="catalogo-itens-racao"
               value={item}
               onChange={(e) => setItem(e.target.value)}
               placeholder="Ex: Ração Operacional, Água Mineral 500ml..."
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-600 focus:border-transparent"
             />
+            <datalist id="catalogo-itens-racao">
+              {catalogo.map((c) => (
+                <option key={c.id} value={c.item} />
+              ))}
+            </datalist>
+            {catalogo.length > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                Digite para ver sugestões do catálogo cadastrado em Configurações, ou informe um
+                item livre.
+              </p>
+            )}
             {errors.item && (
               <p className="text-sm text-red-600 mt-1">{errors.item}</p>
             )}

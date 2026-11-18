@@ -127,8 +127,24 @@ export const PRECOS_FALLBACK: Record<TipoCombustivel, Partial<Record<SiglaEstado
   },
 };
 
-// Fator de segurança para Classe III (30%)
-export const FATOR_SEGURANCA_CLASSE_III = 1.3;
+// Fator de segurança para Classe III — editável em Configurações > Preços
+// (ver aplicarOverrideFatorSegurancaClasseIII). Padrão 1.0 (sem margem):
+// a Diretriz de Prontidão Logística 2026 (Apêndice 2, item 3) calcula o
+// combustível apenas como consumo x distância/horas, sem nenhum
+// multiplicador de margem — os exemplos oficiais de memória de cálculo não
+// aplicam fator algum. O campo continua editável para o admin que queira
+// aplicar uma margem própria.
+export const CONFIG_FATOR_SEGURANCA_CLASSE_III = { valor: 1.0 };
+
+/** Aplica um override de fator de segurança vindo de Configurações > Preços. */
+export function aplicarOverrideFatorSegurancaClasseIII(
+  overrides: Record<string, { valor?: number }>
+): void {
+  const valor = overrides.COMBUSTIVEL?.valor;
+  if (typeof valor === "number" && valor > 0) {
+    CONFIG_FATOR_SEGURANCA_CLASSE_III.valor = valor;
+  }
+}
 
 // URL da API de preços de combustível
 const API_COMBUSTIVEL_URL = "https://combustivelapi.com.br/api/precos/";
@@ -630,7 +646,8 @@ export function calcularClasseIII(
   }
 
   // Aplicar fator de segurança
-  const litrosComFator = litrosTotais * FATOR_SEGURANCA_CLASSE_III;
+  const fatorSeguranca = CONFIG_FATOR_SEGURANCA_CLASSE_III.valor;
+  const litrosComFator = litrosTotais * fatorSeguranca;
 
   // Calcular valor em reais - usar preço customizado se fornecido
   const precoMedioNacional = PRECOS_COMBUSTIVEL[params.tipoCombustivel];
@@ -657,11 +674,11 @@ export function calcularClasseIII(
 
   const textoPadrao = `Aquisição de ${nomeCombustivel} para custear deslocamento de viaturas e equipamentos no contexto da ${operacaoTexto}.`;
 
-  const memoriaCalculo = `Viatura/Equipamento x (trecho / consumo) x dias x 1,3
+  const memoriaCalculo = `Viatura/Equipamento x (trecho / consumo) x dias x ${fatorSeguranca}
 
 ${textoItens.join("\n")}
 
-Total: ${litrosTotais.toFixed(1)} L de ${nomeCombustivel} x ${FATOR_SEGURANCA_CLASSE_III} (Fator de segurança de 30%): ${litrosComFator.toFixed(1)} L
+Total: ${litrosTotais.toFixed(1)} L de ${nomeCombustivel} x ${fatorSeguranca} (Fator de segurança de ${((fatorSeguranca - 1) * 100).toFixed(0)}%): ${litrosComFator.toFixed(1)} L
 Valor Total: ${litrosComFator.toFixed(1)} L de ${nomeCombustivel} x ${infoPreco} = ${totalFormatado}`;
 
   // Gerar texto da fonte de preço

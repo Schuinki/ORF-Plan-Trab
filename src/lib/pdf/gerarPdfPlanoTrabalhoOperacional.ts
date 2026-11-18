@@ -8,6 +8,7 @@ import {
   formatarNumero,
   formatarDataExtenso,
   formatarDataCurta,
+  prepararTextoParaTabela,
 } from "@/lib/pdf/formatadores";
 import { agruparConsolidado } from "@/lib/consolidado/construirConsolidado";
 
@@ -52,6 +53,9 @@ export interface DespesaOperacionalParaPdf {
   codUGDestino: string;
   omNomeCompradora: string;
   codUGCompradora: string;
+  /** OM titular do Plano de Trabalho — usada no agrupamento do "OM RESPONSÁVEL". */
+  omNomeOwner: string;
+  codUGOwner: string;
   valoresPorNd: Record<string, number>;
   gnd3: number;
   gnd4: number;
@@ -79,7 +83,8 @@ export function situacaoLabel(situacao: string | null): string | null {
 }
 
 export function processarDespesasOperacionais(
-  despesas: PlanoComRelacoes["despesasOperacionais"]
+  despesas: PlanoComRelacoes["despesasOperacionais"],
+  omOwner?: { nome: string; codUG: string | null }
 ): DespesaOperacionalParaPdf[] {
   return despesas.map((despesa) => {
     const valoresPorNd: Record<string, number> = {};
@@ -123,10 +128,12 @@ export function processarDespesasOperacionais(
       codUGDestino: despesa.omDestino.codUG || "",
       omNomeCompradora: despesa.omCompradora.sigla,
       codUGCompradora: despesa.omCompradora.codUG || "",
+      omNomeOwner: omOwner?.nome || despesa.omDestino.sigla,
+      codUGOwner: omOwner?.codUG || despesa.omDestino.codUG || "",
       valoresPorNd,
       gnd3,
       gnd4,
-      detalhamento: partes.join("\n"),
+      detalhamento: prepararTextoParaTabela(partes.join("\n")),
     };
   });
 }
@@ -181,14 +188,21 @@ export async function gerarPdfPlanoTrabalhoOperacional(
   operacao: OperacaoComOM,
   responsavel?: User,
   opcoes?: OpcoesPdfOperacional,
-  omsIncluidas?: string[]
-): Promise<void> {
+  omsIncluidas?: string[],
+  /** Ver comentário equivalente em gerarPdfPlanoTrabalho. */
+  docExistente?: jsPDF
+): Promise<jsPDF> {
   planos = ([] as PlanoComRelacoes[]).concat(planos);
-  const doc = new jsPDF({
-    orientation: "landscape",
-    unit: "mm",
-    format: "a4",
-  });
+  const doc =
+    docExistente ??
+    new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
+  if (docExistente) {
+    doc.addPage("a4", "landscape");
+  }
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -224,10 +238,13 @@ export async function gerarPdfPlanoTrabalhoOperacional(
   doc.text("EXÉRCITO BRASILEIRO", pageWidth / 2, currentY, { align: "center" });
   currentY += 5;
 
+  // Sem override explícito, usa a OM dona da Operação como cabeçalho —
+  // nunca um nome de OM fixo no código.
   const omPrincipal =
-    planos.length > 1
-      ? "COMANDO MILITAR DA AMAZÔNIA"
-      : opcoes?.omPrincipal ?? planos[0].om.nome.toUpperCase();
+    opcoes?.omPrincipal?.toUpperCase() ??
+    (planos.length > 1
+      ? operacao.om.nome.toUpperCase()
+      : planos[0].om.nome.toUpperCase());
 
   doc.text(omPrincipal, pageWidth / 2, currentY, { align: "center" });
   currentY += 6;
@@ -427,14 +444,18 @@ export async function gerarPdfPlanoTrabalhoOperacional(
   }
 
   // Achata as despesas de TODOS os planos recebidos uma única vez; o
-  // agrupamento por OM (chave = OM destino) acontece sobre essa lista
-  // combinada, então uma OM com dois Planos de Trabalho na mesma Operação
-  // cai num único grupo em vez de aparecer duas vezes.
+  // agrupamento por OM (chave = OM TITULAR do Plano, não o destino do
+  // rateio) acontece sobre essa lista combinada, então uma OM com dois
+  // Planos de Trabalho na mesma Operação cai num único grupo em vez de
+  // aparecer duas vezes.
   const todasDespesasBrutas = planos.flatMap((plano) =>
-    processarDespesasOperacionais(plano.despesasOperacionais)
+    processarDespesasOperacionais(plano.despesasOperacionais, {
+      nome: plano.om.nome,
+      codUG: plano.om.codUG,
+    })
   );
   const { porOM: gruposPorOM } = agruparConsolidado(todasDespesasBrutas, {
-    chaveAgrupamento: "destino",
+    chaveAgrupamento: "owner",
     omsIncluidas,
   });
 
@@ -443,16 +464,14 @@ export async function gerarPdfPlanoTrabalhoOperacional(
   let valorTotalGeralOperacao = 0;
 
   gruposPorOM.forEach((grupo) => {
-    if (gruposPorOM.length > 1) {
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.text(
-        `OM RESPONSÁVEL: ${grupo.omNome.toUpperCase()}`,
-        marginLeft,
-        currentY
-      );
-      currentY += 8;
-    }
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text(
+      `OM RESPONSÁVEL: ${grupo.omNome.toUpperCase()}`,
+      marginLeft,
+      currentY
+    );
+    currentY += 8;
 
     const tableBody: (string | number)[][] = grupo.linhas.map(linhaDespesa);
 
@@ -553,5 +572,16 @@ export async function gerarPdfPlanoTrabalhoOperacional(
     );
   }
 
-  doc.save(`plano_trabalho_operacional_${operacao.nome.replace(/\s+/g, "_")}.pdf`);
+  if (!docExistente) {
+    // Nome do arquivo inclui a(s) OM(s) para não colidir quando se baixa o
+    // PDF de mais de uma OM da mesma Operação.
+    const siglaArquivo =
+      planos.length > 1
+        ? "Consolidado"
+        : planos[0].om.sigla.replace(/\s+/g, "_");
+    doc.save(
+      `plano_trabalho_operacional_${siglaArquivo}_${operacao.nome.replace(/\s+/g, "_")}.pdf`
+    );
+  }
+  return doc;
 }

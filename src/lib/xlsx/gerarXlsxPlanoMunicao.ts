@@ -14,6 +14,7 @@ export interface PlanoMunicaoParaXlsx {
   titulo: string;
   itensMunicao: ItemMunicaoParaXlsx[];
   operacao: { nome: string };
+  om: { nome: string; sigla: string };
 }
 
 /**
@@ -38,7 +39,7 @@ export async function gerarXlsxPlanoMunicao(
       { header: "Memória de Cálculo", key: "memoria", width: 50 },
     ],
     {
-      omPrincipal: plano.operacao.nome,
+      omPrincipal: plano.om.nome,
       subtitulo: `PLANO DE MUNIÇÃO PARA ${plano.operacao.nome}`,
       titulo: "PLANO DE MUNIÇÃO",
     }
@@ -64,6 +65,6 @@ export async function gerarXlsxPlanoMunicao(
 
   await baixarWorkbook(
     workbook,
-    `plano_municao_${plano.operacao.nome.replace(/\s+/g, "_")}.xlsx`
+    `plano_municao_${plano.om.sigla}_${plano.operacao.nome.replace(/\s+/g, "_")}.xlsx`
   );
 }

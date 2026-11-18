@@ -108,7 +108,14 @@ export default function NovoPlanoPage() {
   useEffect(() => {
     if (tituloEditado || !operacao) return;
 
-    const sigla = user?.om.sigla || "";
+    // A sigla deve ser da OM para a qual o plano está sendo criado
+    // (formData.omId), não necessariamente a OM do usuário logado — um S4
+    // pode estar criando o plano em nome de uma OM subordinada.
+    const omSiglaParam = searchParams.get("omSigla");
+    const sigla =
+      omSiglaParam ||
+      (formData.omId === user?.om.id ? user?.om.sigla : "") ||
+      "";
     const partes = [
       `P Trab ${TIPO_ABREV[formData.tipo] || formData.tipo}`,
       sigla,

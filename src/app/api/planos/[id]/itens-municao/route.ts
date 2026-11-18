@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { z } from "zod";
 import { autoAdicionarParticipante } from "@/lib/services/omParticipante";
+import { canUserActOnOm } from "@/lib/validators/om-participante";
 
 const createItemMunicaoSchema = z.object({
   omId: z.string().cuid("ID de OM inválido"),
@@ -121,6 +122,13 @@ export async function POST(
       return NextResponse.json(
         { error: "Usuário não encontrado" },
         { status: 404 }
+      );
+    }
+
+    if (!(await canUserActOnOm(user.role, user.omId, plano.omId))) {
+      return NextResponse.json(
+        { error: "Você só pode lançar itens em Planos de Trabalho da sua OM" },
+        { status: 403 }
       );
     }
 

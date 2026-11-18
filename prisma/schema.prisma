@@ -511,6 +511,32 @@ model RascunhoDespesaOperacional {
   @@map("rascunhos_despesa_operacional")
 }
 
+/** Item de catálogo de Munição configurado pelo admin em Configurações. Aparece como opção pré-definida ao lançar um ItemMunicao — o usuário também pode digitar um item livre fora do catálogo. */
+model CatalogoItemMunicao {
+  id        String   @id @default(cuid())
+  neeNsn    String   @map("nee_nsn")
+  tipo      String
+  ordem     Int      @default(0)
+  updatedBy String?  @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([neeNsn, tipo])
+  @@map("catalogo_itens_municao")
+}
+
+/** Item de catálogo de Ração (R-2) configurado pelo admin em Configurações. Aparece como opção pré-definida ao lançar um ItemRacaoR2 — o usuário também pode digitar um item livre fora do catálogo. */
+model CatalogoItemRacao {
+  id        String   @id @default(cuid())
+  item      String   @unique
+  ordem     Int      @default(0)
+  updatedBy String?  @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("catalogo_itens_racao")
+}
+
 model Tipo {
   id               String    @id @default(cuid())
   nome             String
@@ -533,6 +559,8 @@ model User {
   nomeCompleto         String                @map("nome_completo")
   nomeGuerra           String?               @map("nome_guerra")
   postoGraduacao       String                @map("posto_graduacao")
+  /** Cargo/função na OM (ex.: S1, S2, S3, S4, Comandante) — independente da Role de permissão do sistema. */
+  cargo                String?
   telefone             String?
   role                 Role
   isActive             Boolean               @default(true) @map("is_active")
